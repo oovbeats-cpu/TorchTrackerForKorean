@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>TorchTracker-Setup</AssemblyName>
+    <Version>1.0.0</Version>
+    <Company>TorchTracker</Company>
+    <Product>TorchTracker Setup</Product>
+    <Description>Portable extractor for TorchTracker - 토치라이트 인피니트 트래커</Description>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Embed the ZIP file as a resource -->
+  <ItemGroup>
+    <EmbeddedResource Include="TorchTracker.zip" Condition="Exists('TorchTracker.zip')">
+      <LogicalName>TorchTracker.zip</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

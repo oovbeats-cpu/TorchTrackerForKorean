@@ -1,0 +1,1001 @@
+<!doctype html>
+<html lang="ko">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>토치라이트 결정 트래커</title>
+        <link rel="icon" type="image/webp" href="favicon.webp" />
+        <link rel="stylesheet" href="style.css?v=20260204j" />
+        <script src="/lib/chart.umd.min.js"></script>
+        <script src="/lib/chartjs-adapter-date-fns.bundle.min.js"></script>
+    </head>
+    <body>
+        <!-- Custom Window Titlebar (frameless mode) -->
+        <div id="custom-titlebar" class="custom-titlebar hidden">
+            <div class="titlebar-drag-region"></div>
+            <div class="titlebar-buttons">
+                <button class="titlebar-btn minimize-btn" onclick="minimizeWindow()" title="최소화">
+                    <img src="assets/minimize.ico" alt="−" class="titlebar-icon">
+                </button>
+                <button class="titlebar-btn close-btn" onclick="closeWindow()" title="닫기">
+                    <img src="assets/close.ico" alt="✕" class="titlebar-icon">
+                </button>
+            </div>
+        </div>
+
+        <!-- Window resize handles (frameless mode) -->
+        <div id="resize-handles" class="hidden">
+            <div class="resize-handle resize-handle-n" data-edge="n"></div>
+            <div class="resize-handle resize-handle-s" data-edge="s"></div>
+            <div class="resize-handle resize-handle-e" data-edge="e"></div>
+            <div class="resize-handle resize-handle-w" data-edge="w"></div>
+            <div class="resize-handle resize-handle-nw" data-edge="nw"></div>
+            <div class="resize-handle resize-handle-ne" data-edge="ne"></div>
+            <div class="resize-handle resize-handle-sw" data-edge="sw"></div>
+            <div class="resize-handle resize-handle-se" data-edge="se"></div>
+        </div>
+
+        <div id="app-scroll-container">
+        <div class="container">
+            <!-- Top Control Bar -->
+            <div class="top-control-bar">
+                <div class="control-group">
+                    <label class="toggle-mini cloud-toggle">
+                        <input type="checkbox" id="cloud-sync-toggle" />
+                        <span>클라우드 동기화</span>
+                    </label>
+                    <span
+                        id="cloud-sync-status"
+                        class="cloud-status-indicator"
+                        title="클라우드 동기화 상태"
+                    ></span>
+                </div>
+                <button
+                    class="control-btn"
+                    onclick="openSettingsModal()"
+                    title="설정"
+                >
+                    &#9881;
+                </button>
+                <button class="control-btn" onclick="openHelpModal()">
+                    사용 방법
+                </button>
+                <button class="control-btn" onclick="resetStats()">
+                    통계 초기화
+                </button>
+                <div class="control-group">
+                    <label class="toggle-mini">
+                        <input type="checkbox" id="auto-refresh" checked />
+                        <span>자동 새로고침</span>
+                    </label>
+                    <span id="status-indicator" class="status-dot"></span>
+                </div>
+            </div>
+
+            <header>
+                <div class="header-main">
+                    <div class="title-section">
+                        <h1>토치라이트 인피니트</h1>
+                        <div class="net-worth-inline">
+                            현재 보유 총 자산: <span id="net-worth">0 </span> 결정
+                        </div>
+                    </div>
+
+                    <div id="player-info" class="player-info hidden">
+                        <span id="player-name" class="player-name"></span>
+                        <span id="player-details" class="player-details"></span>
+                    </div>
+                    <div
+                        id="awaiting-player-message"
+                        class="awaiting-message hidden"
+                    >
+                        캐릭터 로그인 대기 중... (게임을 끄지 말고 재접속하세요)
+                    </div>
+
+                    <div class="header-divider"></div>
+
+                    <!-- T Time Measurement UI -->
+                    <div class="time-measurement-container">
+                        <div class="time-header">
+                            <div class="time-title">
+                                <img src="assets/time-check.png" class="time-icon" alt="T" style="width: 20px; height: 20px;" />
+                                <span>T 시간 측정</span>
+                            </div>
+                            <div class="time-controls">
+                                <button id="play-btn" class="time-btn play">
+                                    <img src="assets/play.png" alt="Play" style="width: 14px; height: 14px;" />
+                                </button>
+                                <button id="pause-btn" class="time-btn pause hidden">
+                                    <img src="assets/pause.png" alt="Pause" style="width: 14px; height: 14px;" />
+                                </button>
+                            </div>
+                        </div>
+                        <div class="time-cards">
+                            <div class="time-card total">
+                                <span class="time-label">총 플레이 시간</span>
+                                <strong id="total-play-time">0시간 0분 0초</strong>
+                            </div>
+                            <div class="time-card mapping">
+                                <span class="time-label">맵핑 플레이 시간</span>
+                                <strong id="mapping-play-time">0시간 0분 0초</strong>
+                            </div>
+                            <div class="time-card surgery-avg">
+                                <span class="time-label">평균 수술 준비 시간</span>
+                                <strong id="avg-surgery-time">0분 0초</strong>
+                            </div>
+                            <div class="time-card surgery-count">
+                                <span class="time-label">총 수술 횟수</span>
+                                <strong id="total-surgery-count">0회</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="header-divider"></div>
+                
+                <div class="performance-section">
+                    <div class="performance-dashboards">
+                        <div class="perf-row total">
+                            <div class="perf-card">
+                                <span class="perf-label">분당 평균 수익</span>
+                                <span id="total-min-avg" class="perf-value">0</span>
+                            </div>
+                            <div class="perf-card">
+                                <span class="perf-label">시간당 평균 수익</span>
+                                <span id="total-hour-avg" class="perf-value">0</span>
+                            </div>
+                        </div>
+                        <div class="perf-row mapping">
+                            <div class="perf-card">
+                                <span class="perf-label">분당 평균 수익</span>
+                                <span id="mapping-min-avg" class="perf-value">0</span>
+                            </div>
+                            <div class="perf-card">
+                                <span class="perf-label">시간당 평균 수익</span>
+                                <span id="mapping-hour-avg" class="perf-value">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="grid-card">
+                            <span class="grid-label"><img src="assets/run-icon.png" class="grid-icon" alt="🏃" /> 런 횟수</span>
+                            <span id="total-runs-grid" class="grid-value">0회</span>
+                        </div>
+                        <div class="grid-card">
+                            <span class="grid-label">평균 런 시간</span>
+                            <span id="avg-run-time-grid" class="grid-value">0분 0초</span>
+                        </div>
+                        <div class="grid-card">
+                            <span class="grid-label">총 입장비용</span>
+                            <span id="total-cost-grid" class="grid-value">0결정</span>
+                        </div>
+                        <div class="grid-card">
+                            <span class="grid-label">총 순수익</span>
+                            <span id="total-income-grid" class="grid-value">0결정</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="header-divider"></div>
+
+                <div id="player-info" class="player-info hidden">
+            </header>
+
+            <main>
+                <div class="left-column">
+                    <section
+                        id="active-run-panel"
+                        class="panel active-run-panel hidden"
+                    >
+                        <h2>
+                            <span class="active-indicator"></span>
+                            현재 런: <span id="active-run-zone">--</span>
+                            <span
+                                id="active-run-duration"
+                                class="active-run-duration"
+                                >--</span
+                            >
+                        </h2>
+                        <div class="active-run-stats">
+                            <span class="active-run-value"
+                                >가치:
+                                <strong id="active-run-value">0</strong>
+                                결정</span
+                            >
+                        </div>
+                        <div id="active-run-loot" class="active-run-loot"></div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="section-header">
+                            <h2>최근 런</h2>
+                            <button
+                                class="report-btn"
+                                onclick="showLootReport()"
+                            >
+                                리포트
+                            </button>
+                        </div>
+                        <div class="runs-scroll-container">
+                            <table id="runs-table">
+                                <thead>
+                                    <tr>
+                                        <th>지역</th>
+                                        <th>소요 시간</th>
+                                        <th>가치</th>
+                                        <th class="detail-header">상세</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="runs-body">
+                                    <tr>
+                                        <td colspan="4" class="loading">
+                                            로딩 중...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="right-column">
+                    <section class="panel" id="inventory-panel">
+                        <h2>현재 인벤토리</h2>
+                        <div class="inventory-scroll-container" id="inventory-scroll-container">
+                            <table id="inventory-table">
+                            <thead>
+                                <tr>
+                                    <th>아이템</th>
+                                    <th
+                                        class="sortable"
+                                        data-sort="quantity"
+                                        onclick="sortInventory('quantity')"
+                                    >
+                                        수량
+                                        <span
+                                            class="sort-indicator"
+                                            id="sort-quantity"
+                                        ></span>
+                                    </th>
+                                    <th
+                                        class="sortable"
+                                        data-sort="unit_price"
+                                        onclick="sortInventory('unit_price')"
+                                    >
+                                        단가
+                                        <span
+                                            class="sort-indicator"
+                                            id="sort-unit_price"
+                                        ></span>
+                                    </th>
+                                    <th
+                                        class="sortable active"
+                                        data-sort="value"
+                                        onclick="sortInventory('value')"
+                                    >
+                                        총 가치
+                                        <span
+                                            class="sort-indicator"
+                                            id="sort-value"
+                                        ></span>
+                                    </th>
+                                    <th
+                                        id="sparkline-header"
+                                        class="sparkline-header hidden"
+                                        title="시세 추이 (72시간)"
+                                    >
+                                        추이
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventory-body">
+                                <tr>
+                                    <td colspan="5" class="loading">로딩 중...</td>
+                                </tr>
+                            </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </main>
+
+            <section class="charts-row">
+                <div class="chart-panel">
+                    <h2>누적 가치</h2>
+                    <canvas id="cumulative-value-chart"></canvas>
+                </div>
+                <div class="chart-panel">
+                    <h2>
+                        시간당 수익
+                        <span
+                            class="info-icon"
+                            title="맵 진행 시간만 계산됩니다. 마을, 은신처, 런 사이 시간은 제외됩니다."
+                            >ⓘ</span
+                        >
+                    </h2>
+                    <canvas id="value-rate-chart"></canvas>
+                </div>
+            </section>
+
+            <footer>
+                <span id="last-update">마지막 업데이트: --</span>
+                <span id="collector-status">수집기: --</span>
+                <span class="footer-version">
+                    <span id="app-version">v--</span>
+                    <button
+                        id="exit-app-btn"
+                        class="exit-btn hidden"
+                        onclick="exitApp()"
+                    >
+                        종료
+                    </button>
+                </span>
+            </footer>
+        </div>
+
+        <div id="loot-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-title">런 상세 정보</h3>
+                    <button class="close-btn" onclick="closeModal()">
+                        &times;
+                    </button>
+                </div>
+                <div id="modal-body"></div>
+            </div>
+        </div>
+
+        <div id="help-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>사용 방법</h3>
+                    <button class="close-btn" onclick="closeHelpModal()">
+                        &times;
+                    </button>
+                </div>
+                <div class="help-body">
+                    <section class="help-section">
+                        <h4>1. 게임 로깅 활성화</h4>
+                        <p>
+                            결정 트래커는 게임 로그 파일을 읽어서 루팅을 추적합니다.
+                            로깅을 활성화하려면:
+                        </p>
+                        <ol>
+                            <li>토치라이트 인피니트를 실행합니다</li>
+                            <li><strong>설정</strong>으로 이동합니다</li>
+                            <li>
+                                <strong>"로그 오픈"</strong> 버튼을 찾아서
+                                클릭합니다
+                            </li>
+                        </ol>
+                        <p class="help-note">
+                            이 기능이 활성화되지 않으면 결정 트래커가 데이터를
+                            수집할 수 없습니다.
+                        </p>
+                    </section>
+
+                    <section class="help-section">
+                        <h4>2. 캐릭터로 로그인</h4>
+                        <p>
+                            결정 트래커가 추적을 시작하려면 캐릭터 로그인을 감지해야
+                            합니다:
+                        </p>
+                        <ol>
+                            <li>
+                                이미 게임 중이라면 캐릭터 선택 화면으로
+                                <strong>로그아웃</strong>합니다
+                            </li>
+                            <li>
+                                추적하려는 캐릭터로
+                                <strong>다시 로그인</strong>합니다
+                            </li>
+                            <li>
+                                결정 트래커가 로그인을 감지하면 "캐릭터 로그인 대기
+                                중..." 메시지가 사라집니다
+                            </li>
+                        </ol>
+                        <p class="help-note">
+                            <strong>중요:</strong> 재로그인할 때 게임을 종료하지
+                            마세요 - 캐릭터 선택 화면으로 나갔다가 다시
+                            들어오세요. 게임을 종료하면 로그 파일 업데이트가
+                            중단됩니다.
+                        </p>
+                        <p class="help-note">
+                            결정 트래커는 각 캐릭터별로 데이터를 별도로 추적합니다.
+                            결정 트래커 시작 후 재로그인해야 캐릭터를 감지할 수
+                            있습니다.
+                        </p>
+                    </section>
+
+                    <section class="help-section">
+                        <h4>3. 인벤토리 동기화</h4>
+                        <p>현재 아이템으로 인벤토리 화면을 채우려면:</p>
+                        <ol>
+                            <li>게임 내에서 인벤토리를 엽니다</li>
+                            <li>
+                                <strong>정렬</strong> 버튼을 클릭합니다 (아이템
+                                자동 정렬)
+                            </li>
+                            <li>
+                                추적하려는 각 탭에서 반복합니다 (스킬, 재화,
+                                기타)
+                            </li>
+                        </ol>
+                        <p class="help-note">
+                            장비 탭은 옵션에 따라 가격이 크게 달라지므로
+                            추적되지 않습니다.
+                        </p>
+                    </section>
+
+                    <section class="help-section">
+                        <h4>4. 자동 가격 학습</h4>
+                        <p>
+                            결정 트래커는 게임 내 거래소를 사용할 때 자동으로 아이템
+                            가격을 학습합니다:
+                        </p>
+                        <ol>
+                            <li>게임 내 거래소를 엽니다</li>
+                            <li>가격을 알고 싶은 아이템을 검색합니다</li>
+                            <li>
+                                결정 트래커가 등록된 가격을 캡처하고 참조 가격(하위
+                                10%)을 계산합니다
+                            </li>
+                        </ol>
+                        <p class="help-note">
+                            가격은 로컬에 저장되며 루팅 가치와 총 자산 계산에
+                            사용됩니다.
+                        </p>
+                    </section>
+
+                    <section class="help-section">
+                        <h4>5. 런 추적</h4>
+                        <p>로깅이 활성화되면 결정 트래커가 자동으로:</p>
+                        <ul>
+                            <li>맵 입장 및 퇴장을 감지합니다</li>
+                            <li>각 런에서 획득한 모든 아이템을 추적합니다</li>
+                            <li>학습된 가격을 기반으로 가치를 계산합니다</li>
+                            <li>
+                                활성 런 시간만을 기준으로 시간당 가치를
+                                표시합니다
+                            </li>
+                        </ul>
+                    </section>
+
+                    <section class="help-section">
+                        <h4>6. 클라우드 동기화 (선택사항)</h4>
+                        <p>
+                            클라우드 동기화를 활성화하여 커뮤니티 가격 데이터를 받으세요:
+                        </p>
+                        <ol>
+                            <li>
+                                헤더에서 <strong>클라우드 동기화</strong> 토글을
+                                클릭합니다
+                            </li>
+                            <li>다른 사용자들의 집계된 가격을 받게 됩니다</li>
+                        </ol>
+                        <p>장점:</p>
+                        <ul>
+                            <li>
+                                아직 검색하지 않은 아이템의 가격을 알 수
+                                있습니다
+                            </li>
+                            <li>
+                                스파크라인 차트로 가격 추이를 볼 수 있습니다
+                            </li>
+                        </ul>
+                        <p class="help-note">
+                            <strong>보안:</strong> 기본적으로 읽기 전용 모드입니다.
+                            커뮤니티 가격만 받고, 내 데이터는 외부로 전송되지 않습니다.
+                            계정이 필요 없으며 익명으로 동작합니다.
+                        </p>
+                    </section>
+                </div>
+            </div>
+        </div>
+
+        <div id="no-character-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>캐릭터 감지 안됨</h3>
+                    <button class="close-btn" onclick="closeNoCharacterModal()">
+                        &times;
+                    </button>
+                </div>
+                <div class="help-body">
+                    <section class="help-section">
+                        <p>
+                            결정 트래커가 캐릭터 정보를 감지할 수 없습니다.
+                            일반적으로 게임 로깅이 활성화되지 않았거나 아직
+                            캐릭터로 로그인하지 않았다는 의미입니다.
+                        </p>
+                    </section>
+                    <section class="help-section">
+                        <h4>해결 방법:</h4>
+                        <ol>
+                            <li>토치라이트 인피니트를 실행합니다</li>
+                            <li><strong>설정</strong>으로 이동합니다</li>
+                            <li><strong>"로그 오픈"</strong>을 클릭합니다</li>
+                            <li>
+                                캐릭터 선택 화면으로 로그아웃합니다 (게임을
+                                종료하지 마세요)
+                            </li>
+                            <li>캐릭터로 다시 로그인합니다</li>
+                        </ol>
+                        <p class="help-note">
+                            <strong>중요:</strong> 재로그인할 때 게임을 종료하지
+                            마세요 - 캐릭터 선택 화면으로 나갔다가 다시
+                            들어오세요. 게임을 종료하면 로그 파일 업데이트가
+                            중단됩니다.
+                        </p>
+                        <p class="help-note">
+                            결정 트래커가 로그인하면 자동으로 캐릭터를 감지합니다.
+                        </p>
+                    </section>
+                    <section class="help-section">
+                        <p class="help-note">
+                            결정 트래커는 각 캐릭터와 리그별로 데이터를 별도로
+                            추적합니다. 캐릭터가 감지되지 않으면 데이터가 제대로
+                            분리되지 않을 수 있습니다.
+                        </p>
+                    </section>
+                    <div class="modal-actions">
+                        <button
+                            onclick="closeNoCharacterModal()"
+                            class="dismiss-btn"
+                        >
+                            닫기
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="settings-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>설정</h3>
+                    <button class="close-btn" onclick="closeSettingsModal()">
+                        &times;
+                    </button>
+                </div>
+                <div class="settings-body">
+                    <!-- Value Calculations Section -->
+                    <section class="settings-section">
+                        <h4>가치 계산</h4>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="settings-trade-tax" checked />
+                            <div class="toggle-info">
+                                <span class="toggle-label">거래 수수료</span>
+                                <span class="toggle-desc"
+                                    >아이템 가치에 12.5% 거래소 수수료
+                                    적용</span
+                                >
+                            </div>
+                        </label>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="settings-map-costs" checked />
+                            <div class="toggle-info">
+                                <span class="toggle-label">맵 비용</span>
+                                <span class="toggle-desc"
+                                    >나침반/비콘 비용을 추적하고 런 가치에서
+                                    차감</span
+                                >
+                            </div>
+                        </label>
+                    </section>
+
+                    <!-- Auto-Pause Options Section -->
+                    <section class="settings-section">
+                        <h4>자동 일시정지</h4>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="pause-bag" checked />
+                            <div class="toggle-info">
+                                <span class="toggle-label">가방을 열었을 때 일시정지</span>
+                            </div>
+                        </label>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="pause-pet" checked />
+                            <div class="toggle-info">
+                                <span class="toggle-label">계약을 열었을 때 일시정지</span>
+                            </div>
+                        </label>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="pause-talent" checked />
+                            <div class="toggle-info">
+                                <span class="toggle-label">재능 보드를 열었을 때 일시정지</span>
+                            </div>
+                        </label>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="pause-settings" checked />
+                            <div class="toggle-info">
+                                <span class="toggle-label">설정창을 열었을 때 일시정지</span>
+                            </div>
+                        </label>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="pause-skill" checked />
+                            <div class="toggle-info">
+                                <span class="toggle-label">스킬창을 열었을 때 일시정지</span>
+                            </div>
+                        </label>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="pause-auction" checked />
+                            <div class="toggle-info">
+                                <span class="toggle-label">거래소를 열었을 때 일시정지</span>
+                            </div>
+                        </label>
+                    </section>
+
+                    <!-- Cloud Sync Options Section -->
+                    <section class="settings-section" id="cloud-settings-section" style="display: none;">
+                        <h4>클라우드 동기화 설정</h4>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="cloud-auto-refresh" checked />
+                            <div class="toggle-info">
+                                <span class="toggle-label">자동 갱신</span>
+                                <span class="toggle-desc">1시간마다 클라우드 가격 갱신 (거래소 가격 유지)</span>
+                            </div>
+                        </label>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="cloud-midnight-refresh" checked />
+                            <div class="toggle-info">
+                                <span class="toggle-label">자정 강제 갱신</span>
+                                <span class="toggle-desc">매일 자정에 모든 가격을 클라우드로 갱신</span>
+                            </div>
+                        </label>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="cloud-exchange-override" checked />
+                            <div class="toggle-info">
+                                <span class="toggle-label">거래소 가격 우선</span>
+                                <span class="toggle-desc">거래소에서 검색한 가격이 클라우드 가격보다 우선</span>
+                            </div>
+                        </label>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="cloud-startup-refresh" checked />
+                            <div class="toggle-info">
+                                <span class="toggle-label">시작 시 강제 갱신</span>
+                                <span class="toggle-desc">프로그램 시작 시 클라우드 가격 강제 갱신</span>
+                            </div>
+                        </label>
+                        <div class="settings-button-row">
+                            <button id="cloud-force-refresh-btn" class="settings-btn" disabled>
+                                클라우드 강제 갱신
+                            </button>
+                        </div>
+                    </section>
+
+                    <!-- Game Directory Section -->
+                    <section class="settings-section">
+                        <h4>게임 경로</h4>
+                        <p id="settings-log-path-current">
+                            현재: <code id="current-log-path">로딩 중...</code>
+                        </p>
+                        <div class="log-path-input-group">
+                            <input
+                                type="text"
+                                id="log-directory-input"
+                                placeholder="C:\Torchlight Infinite 또는 C:\...\Logs\UE_game.log"
+                                onkeyup="if(event.key === 'Enter') validateLogDirectory()"
+                            />
+                            <button
+                                onclick="browseForGameFolder()"
+                                class="browse-btn"
+                                id="browse-folder-btn"
+                                style="display: none"
+                            >
+                                찾아보기
+                            </button>
+                            <button
+                                onclick="validateLogDirectory()"
+                                class="validate-btn"
+                            >
+                                확인
+                            </button>
+                        </div>
+                        <p id="log-path-status" class="log-path-status"></p>
+                        <p class="help-note">
+                            게임 폴더, Logs 폴더, 또는 UE_game.log의 전체 경로를
+                            입력할 수 있습니다
+                        </p>
+                        <div class="settings-section-actions">
+                            <button
+                                onclick="saveLogDirectory()"
+                                id="save-log-dir-btn"
+                                class="settings-btn-primary"
+                                disabled
+                            >
+                                저장 및 재시작
+                            </button>
+                        </div>
+                    </section>
+
+                    <!-- Refresh Interval Section -->
+                    <section class="settings-section">
+                        <h4>새로고침 간격</h4>
+                        <div class="refresh-interval-control">
+                            <input 
+                                type="range" 
+                                id="refresh-interval-slider" 
+                                min="0.5" 
+                                max="5" 
+                                step="0.1" 
+                                value="1"
+                            />
+                            <div class="refresh-interval-input-group">
+                                <input 
+                                    type="number" 
+                                    id="refresh-interval-input" 
+                                    min="0.5" 
+                                    max="5" 
+                                    step="0.1" 
+                                    value="1"
+                                />
+                                <span class="refresh-interval-unit">초</span>
+                            </div>
+                        </div>
+                        <span class="toggle-desc">데이터 새로고침 간격 (0.5초 ~ 5초)</span>
+                    </section>
+
+                    <!-- Settings Action Buttons -->
+                    <div class="settings-modal-actions">
+                        <button class="settings-btn-cancel" onclick="cancelSettings()">취소</button>
+                        <button class="settings-btn-save" onclick="saveAllSettings()">저장</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="price-history-modal" class="modal hidden">
+            <div class="modal-content modal-wide">
+                <div class="modal-header">
+                    <h3 id="price-history-title">시세 추이</h3>
+                    <button
+                        class="close-btn"
+                        onclick="closePriceHistoryModal()"
+                    >
+                        &times;
+                    </button>
+                </div>
+                <div id="price-history-body">
+                    <div class="price-history-chart-container">
+                        <canvas id="price-history-chart"></canvas>
+                    </div>
+                    <div class="price-history-stats">
+                        <div class="price-stat">
+                            <span class="price-stat-label">현재 (중앙값)</span>
+                            <span
+                                id="price-stat-median"
+                                class="price-stat-value"
+                                >--</span
+                            >
+                        </div>
+                        <div class="price-stat">
+                            <span class="price-stat-label">최저 (P10)</span>
+                            <span id="price-stat-p10" class="price-stat-value"
+                                >--</span
+                            >
+                        </div>
+                        <div class="price-stat">
+                            <span class="price-stat-label">최고 (P90)</span>
+                            <span id="price-stat-p90" class="price-stat-value"
+                                >--</span
+                            >
+                        </div>
+                        <div class="price-stat">
+                            <span class="price-stat-label">기여자 수</span>
+                            <span
+                                id="price-stat-contributors"
+                                class="price-stat-value"
+                                >--</span
+                            >
+                        </div>
+                    </div>
+                    <p class="price-history-note">
+                        가격은 익명 커뮤니티 제출에서 집계됩니다. 최소 3명의
+                        고유 기여자가 필요합니다.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div id="loot-report-modal" class="modal hidden">
+            <div class="modal-content modal-wide">
+                <div class="modal-header">
+                    <h3>루팅 리포트</h3>
+                    <button class="close-btn" onclick="closeLootReportModal()">
+                        &times;
+                    </button>
+                </div>
+                <div id="loot-report-body">
+                    <div class="report-summary">
+                        <div class="report-stat">
+                            <span class="report-stat-label">총 가치</span>
+                            <span
+                                id="report-total-value"
+                                class="report-stat-value"
+                                >--</span
+                            >
+                        </div>
+                        <div id="report-cost-stat" class="report-stat hidden">
+                            <span class="report-stat-label">맵 비용</span>
+                            <span
+                                id="report-map-costs"
+                                class="report-stat-value negative"
+                                >--</span
+                            >
+                        </div>
+                        <div class="report-stat">
+                            <span class="report-stat-label">순이익</span>
+                            <span
+                                id="report-profit"
+                                class="report-stat-value primary"
+                                >--</span
+                            >
+                        </div>
+                        <div class="report-stat">
+                            <span class="report-stat-label">런 횟수</span>
+                            <span
+                                id="report-run-count"
+                                class="report-stat-value"
+                                >--</span
+                            >
+                        </div>
+                        <div class="report-stat">
+                            <span class="report-stat-label">총 시간</span>
+                            <span
+                                id="report-total-time"
+                                class="report-stat-value"
+                                >--</span
+                            >
+                        </div>
+                        <div class="report-stat">
+                            <span class="report-stat-label">시간당 수익</span>
+                            <span
+                                id="report-profit-per-hour"
+                                class="report-stat-value"
+                                >--</span
+                            >
+                        </div>
+                        <div class="report-stat">
+                            <span class="report-stat-label">맵당 수익</span>
+                            <span
+                                id="report-profit-per-map"
+                                class="report-stat-value"
+                                >--</span
+                            >
+                        </div>
+                        <div class="report-stat">
+                            <span class="report-stat-label">고유 아이템</span>
+                            <span
+                                id="report-total-items"
+                                class="report-stat-value"
+                                >--</span
+                            >
+                        </div>
+                    </div>
+                    <div class="report-chart-container">
+                        <canvas id="loot-report-chart"></canvas>
+                    </div>
+                    <div class="report-table-container">
+                        <table class="report-table">
+                            <thead>
+                                <tr>
+                                    <th>아이템</th>
+                                    <th>수량</th>
+                                    <th>단가</th>
+                                    <th>총 가치</th>
+                                    <th>%</th>
+                                </tr>
+                            </thead>
+                            <tbody id="loot-report-table-body">
+                                <tr>
+                                    <td colspan="5" class="loading">
+                                        로딩 중...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="modal-actions">
+                        <button
+                            onclick="exportLootReportCSV()"
+                            class="export-btn"
+                        >
+                            CSV 내보내기
+                        </button>
+                        <button
+                            onclick="closeLootReportModal()"
+                            class="cancel-btn"
+                        >
+                            닫기
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="update-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>업데이트 가능</h3>
+                    <button class="close-btn" onclick="closeUpdateModal()">
+                        &times;
+                    </button>
+                </div>
+                <div class="update-body">
+                    <div class="update-info">
+                        <p class="update-version">
+                            <span
+                                class="current-version"
+                                id="update-current-version"
+                                >v--</span
+                            >
+                            <span class="version-arrow">→</span>
+                            <span class="new-version" id="update-new-version"
+                                >v--</span
+                            >
+                        </p>
+                    </div>
+                    <div class="update-release-notes">
+                        <h4>릴리스 노트</h4>
+                        <div
+                            id="update-release-notes"
+                            class="release-notes-content"
+                        >
+                            로딩 중...
+                        </div>
+                    </div>
+                    <div
+                        class="update-progress hidden"
+                        id="update-progress-container"
+                    >
+                        <div class="progress-bar">
+                            <div
+                                class="progress-fill"
+                                id="update-progress-bar"
+                                style="width: 0%"
+                            ></div>
+                        </div>
+                        <span class="progress-text" id="update-progress-text"
+                            >다운로드 중...</span
+                        >
+                    </div>
+                    <div class="modal-actions" id="update-actions">
+                        <button
+                            onclick="downloadAndInstallUpdate()"
+                            class="save-btn"
+                            id="update-download-btn"
+                        >
+                            다운로드 및 설치
+                        </button>
+                        <button onclick="closeUpdateModal()" class="cancel-btn">
+                            나중에
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="reset-modal" class="modal hidden">
+            <div class="modal-content modal-narrow">
+                <div class="modal-header">
+                    <h3>통계 초기화</h3>
+                    <button class="close-btn" onclick="closeResetModal()">
+                        &times;
+                    </button>
+                </div>
+                <div class="modal-body reset-modal-body">
+                    <p class="reset-title">모두 초기화</p>
+                    <p class="reset-desc-text">모든 런 기록, 루팅 데이터, 플레이 시간이 삭제됩니다.<br>인벤토리, 가격, 설정은 보존됩니다.</p>
+                    
+                    <div class="reset-actions">
+                        <button class="reset-cancel-btn" onclick="closeResetModal()">아니오</button>
+                        <button class="reset-confirm-btn" onclick="executeReset('all')">예</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
+
+        <script src="app.js"></script>
+    </body>
+</html>
