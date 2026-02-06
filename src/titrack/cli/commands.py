@@ -738,7 +738,7 @@ def _serve_with_window(args: argparse.Namespace, settings: Settings,
                     app.state.repo.set_player_context(
                         new_player_info.season_id, effective_id)
                 if hasattr(app.state, 'sync_manager') and app.state.sync_manager:
-                    app.state.sync_manager.set_player_info(new_player_info)
+                    app.state.sync_manager.set_season_context(new_player_info.season_id)
 
             player_change_callback[0] = update_app_player
 
@@ -819,6 +819,16 @@ def _serve_with_window(args: argparse.Namespace, settings: Settings,
                 if self._window:
                     self._window.move(x, y)
                     self._window.resize(width, height)
+
+            def toggle_on_top(self, enabled):
+                """Toggle always-on-top window state."""
+                if self._window:
+                    import threading as _threading
+                    def _set():
+                        self._window.on_top = enabled
+                    _threading.Thread(target=_set, daemon=True).start()
+                    return enabled
+                return False
 
         api = Api()
 

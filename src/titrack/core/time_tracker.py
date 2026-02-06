@@ -35,6 +35,7 @@ class TimeTrackerState:
     pause_settings: Optional[PauseSettings] = None
     surgery_prep_start_time: Optional[datetime] = None
     surgery_total_seconds: float = 0.0
+    current_map_play_seconds: float = 0.0
 
 
 class TimeTracker:
@@ -55,19 +56,22 @@ class TimeTracker:
         self._total_play_state = PlayState.STOPPED
         self._total_play_accumulated: timedelta = timedelta()
         self._total_play_start_time: Optional[datetime] = None
-        
+
         self._mapping_state = PlayState.STOPPED
         self._mapping_accumulated: timedelta = timedelta()
         self._mapping_start_time: Optional[datetime] = None
-        
+
+        # Current map run play time (reset on each map start, pauses with mapping)
+        self._current_map_accumulated: timedelta = timedelta()
+
         self._auto_pause_on_inventory = False
         self._was_playing_before_auto_pause = False
         self._was_mapping_before_pause = False
-        
+
         self._surgery_prep_start_time: Optional[datetime] = None
         self._surgery_count = 0
         self._surgery_total_seconds: float = 0.0
-        
+
         self._pause_settings = PauseSettings()
     
     @property
@@ -83,6 +87,15 @@ class TimeTracker:
     def mapping_play_seconds(self) -> float:
         """Get mapping play time in seconds."""
         accumulated = self._mapping_accumulated.total_seconds()
+        if self._mapping_state == PlayState.PLAYING and self._mapping_start_time:
+            current_session = (datetime.now() - self._mapping_start_time).total_seconds()
+            return accumulated + current_session
+        return accumulated
+
+    @property
+    def current_map_play_seconds(self) -> float:
+        """Get actual play time for the current map run (excludes paused time)."""
+        accumulated = self._current_map_accumulated.total_seconds()
         if self._mapping_state == PlayState.PLAYING and self._mapping_start_time:
             current_session = (datetime.now() - self._mapping_start_time).total_seconds()
             return accumulated + current_session
@@ -121,6 +134,7 @@ class TimeTracker:
             current_map_start_time=self._mapping_start_time,
             surgery_count=self._surgery_count,
             avg_surgery_time_seconds=self.avg_surgery_time_seconds,
+            current_map_play_seconds=self.current_map_play_seconds,
             pause_settings=self._pause_settings,
             surgery_prep_start_time=self._surgery_prep_start_time,
             surgery_total_seconds=self._surgery_total_seconds,
@@ -235,6 +249,7 @@ class TimeTracker:
         if self._mapping_state == PlayState.PLAYING and self._mapping_start_time:
             elapsed = datetime.now() - self._mapping_start_time
             self._mapping_accumulated += elapsed
+            self._current_map_accumulated += elapsed
         self._mapping_state = PlayState.PAUSED
         self._mapping_start_time = None
     
@@ -249,6 +264,7 @@ class TimeTracker:
         if self._mapping_state != PlayState.PLAYING:
             self._mapping_state = PlayState.PLAYING
             self._mapping_start_time = timestamp or datetime.now()
+            self._current_map_accumulated = timedelta()
     
     def on_map_end(self, timestamp: Optional[datetime] = None) -> None:
         """Called when leaving a map (entering hub/town)."""
@@ -258,6 +274,8 @@ class TimeTracker:
             self._mapping_accumulated += elapsed
         self._mapping_state = PlayState.STOPPED
         self._mapping_start_time = None
+        # Reset current map timer so it reads 0 after map ends
+        self._current_map_accumulated = timedelta()
     
     def reset_mapping_time(self) -> None:
         """Reset mapping time counter."""
@@ -278,6 +296,7 @@ class TimeTracker:
         self._mapping_state = PlayState.STOPPED
         self._mapping_start_time = None
         self._mapping_accumulated = timedelta()
+        self._current_map_accumulated = timedelta()
         self._was_playing_before_auto_pause = False
         self._surgery_prep_start_time = None
         self._surgery_count = 0

@@ -448,6 +448,7 @@ def get_performance_stats(
 
 @router.get("/active", response_model=Optional[ActiveRunResponse])
 def get_active_run(
+    request: Request,
     repo: Repository = Depends(get_repository),
 ) -> Optional[ActiveRunResponse]:
     """Get the currently active run with live loot drops."""
@@ -482,9 +483,14 @@ def get_active_run(
             net_value = round(total_value - cost_value, 2)
             has_unpriced_costs = bool(unpriced)
 
-    # Calculate duration since run started (use naive datetime to match DB)
-    now = datetime.now()
-    duration = (now - active_run.start_ts).total_seconds()
+    # Use TimeTracker's actual play time (excludes paused time) if available,
+    # otherwise fall back to wall clock duration
+    time_tracker = getattr(request.app.state, 'time_tracker', None)
+    if time_tracker is not None:
+        duration = time_tracker.current_map_play_seconds
+    else:
+        now = datetime.now()
+        duration = (now - active_run.start_ts).total_seconds()
 
     zone_name = get_zone_display_name(active_run.zone_signature, active_run.level_id)
 

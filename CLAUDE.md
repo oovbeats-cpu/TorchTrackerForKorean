@@ -1,638 +1,369 @@
-# CLAUDE.md
+# CLAUDE.md - TITrack 프로젝트 운영 지침서 v3.0.0
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> **Last Updated**: 2026-02-06
+> **Version**: 1.0.2 (Korean Fork)
 
-## Project Overview
+---
 
-TITrack is a **Torchlight Infinite Local Loot Tracker** - a Windows desktop application that reads game log files to track loot, calculate profit per map run, and display net worth. Inspired by WealthyExile (Path of Exile tracker).
+## 0. 작업 관리 규칙 (필수)
 
-**Key constraints:**
-- Fully local, no cloud/internet required
-- Portable EXE distribution (no Python/Node install needed)
-- Privacy-focused (all data stored locally)
-- No cheating/hooking/memory reading - only parses log files
+### 서브에이전트 위임 원칙 (MANDATORY)
+- **모든 코드 작업은 반드시 서브에이전트에게 위임합니다** (Main Agent가 직접 코드를 수정하지 않음)
+- Main Agent는 오케스트레이터/PM 역할만 수행합니다:
+  1. 사용자 요청을 분석하고 작업을 분배
+  2. 적절한 서브에이전트를 선택하여 Task 도구로 위임
+  3. 서브에이전트 결과를 사용자에게 보고
+- **작업 완료 후 반드시 사용자에게 보고합니다**:
+  - 어떤 에이전트가 작업했는지
+  - 무엇을 변경했는지
+  - 결과가 어떤지
 
-## Korean Localization (한국어 버전)
+### 에이전트 선택 기준
+| 작업 유형 | 에이전트 | scope |
+|-----------|----------|-------|
+| 프론트엔드 (HTML/CSS/JS) | Frontend Agent (`general-purpose`) | `web/static/` |
+| 백엔드 (API/DB/수집기) | Backend Agent (`general-purpose`) | `api/`, `db/`, `collector/`, `sync/`, `config/` |
+| 데이터/파서 (로그/모델) | Data Agent (`general-purpose`) | `parser/`, `core/`, `data/` |
+| 테스트/품질 | QA Agent (`general-purpose`) | `tests/` |
+| 빌드/릴리스 | Infra Agent (`Bash`) | `*.spec`, `setup/`, `pyproject.toml` |
+| 코드 탐색/조사 | Explore Agent (`Explore`) | 전체 |
+| 여러 영역에 걸친 작업 | 해당 에이전트들을 **병렬**로 실행 | - |
 
-This is a **Korean-localized fork** of TITrack with full Korean language support.
+### Tasks.md (Single Source of Truth)
+- **위치**: [`docs/Tasks.md`](docs/Tasks.md)
+- **모든 에이전트는 작업 시작 전 반드시 Tasks.md를 읽어야 합니다**
+- 작업 완료 후 결과를 Tasks.md에 기록합니다
+- 형식: `[YYYY-MM-DD HH:MM] [에이전트명] 작업 내용`
 
-### Features
-
-- **UI Translation**: All interface text translated to Korean in [index.html](src/titrack/web/static/index.html) and [app.js](src/titrack/web/static/app.js)
-- **Korean Item Names**: Item names displayed in Korean throughout the application
-- **Fallback System**: Korean name → English name → "알 수 없음 {id}" (Unknown)
-
-### Korean Name Resolution
-
-The [korean_names.py](src/titrack/data/korean_names.py) module loads Korean translations from [items_ko.json](src/titrack/data/items_ko.json):
-
-```python
-# In repository.py:444-452
-def get_item_name(self, config_base_id: int) -> str:
-    """Get item name, preferring Korean name, falling back to English."""
-    ko_name = get_korean_name(config_base_id)  # First try Korean
-    if ko_name:
-        return ko_name
-    item = self.get_item(config_base_id)      # Then English
-    if item and item.name_en:
-        return item.name_en
-    return f"알 수 없음 {config_base_id}"      # Finally, Unknown
+### 에이전트별 역할
+```
+Main Agent       → 오케스트레이션(PM), 사용자 보고, CLAUDE.md/Tasks.md 관리
+Frontend Agent   → src/titrack/web/static/ (HTML, CSS, JS)
+Backend Agent    → src/titrack/api/, db/, collector/, sync/
+Data Agent       → src/titrack/parser/, core/, data/
+QA Agent         → tests/ 작성 및 실행
+Infra Agent      → *.spec, setup/, pyproject.toml, 빌드 관련
 ```
 
-### Korean Translation Files
+### 세션 작업 흐름
+1. Tasks.md에서 현재 상태와 미완료 작업 확인
+2. 사용자 요청 분석 → 담당 에이전트 결정
+3. 서브에이전트에게 Task 도구로 위임 (가능하면 병렬)
+4. 결과를 사용자에게 보고 (에이전트명 + 변경 내용 + 결과)
+5. Tasks.md에 작업 기록, 새 이슈는 Backlog에 추가
 
-| File | Purpose |
-|------|---------|
-| [items_ko.json](src/titrack/data/items_ko.json) | Korean item names (ConfigBaseId → Korean name mapping) |
-| [korean_names.py](src/titrack/data/korean_names.py) | Translation loader module |
+---
 
-**Format of items_ko.json:**
-```json
-{
-  "100300": { "name": "화염 원소", "type": "화폐", "price": 0 },
-  "100": { "name": "클로", "type": "장비", "price": 0 }
-}
+## 1. 프로젝트 개요
+
+**TITrack**은 Torchlight Infinite 게임 로그를 파싱하여 전리품을 추적하는 Windows 데스크톱 앱입니다.
+WealthyExile (Path of Exile) 스타일의 대시보드를 제공합니다.
+
+**핵심 제약사항**:
+- 완전 로컬 (클라우드 불필요)
+- 포터블 EXE 배포 (Python/Node 설치 불필요)
+- 프라이버시 중심 (모든 데이터 로컬 저장)
+- 치팅/후킹/메모리 읽기 없음 - 로그 파일만 파싱
+
+**한국어 포크 특성**:
+- 전체 UI 한국어 번역
+- 한국어 아이템 이름 (`items_ko.json`)
+- 폴백: 한국어 → 영어 → `"알 수 없음 {id}"`
+- 기본 설정: 거래세/맵비용 활성화
+
+---
+
+## 2. 기술 스택
+
+| 기술 | 버전 | 용도 |
+|------|------|------|
+| Python | 3.11+ | 언어 |
+| FastAPI | >=0.109.0 | REST API |
+| Uvicorn | >=0.27.0 | ASGI 서버 |
+| SQLite | (내장) | 데이터베이스 (WAL 모드) |
+| pywebview | >=5.0.0 | 네이티브 윈도우 |
+| Vanilla JS | - | 프론트엔드 (프레임워크 없음) |
+| PyInstaller | >=6.0.0 | 패키징 |
+| supabase | >=2.0.0 | 클라우드 동기화 (선택적: `pip install titrack[cloud]`) |
+
+**플랫폼**: Windows 10/11
+
+---
+
+## 3. 프로젝트 구조
+
+```
+src/titrack/
+├── __main__.py          # 엔트리포인트 (python -m titrack)
+├── version.py           # 버전 관리 (__version__)
+├── api/
+│   ├── app.py           # FastAPI 앱 팩토리
+│   ├── schemas.py       # Pydantic 응답 모델
+│   └── routes/
+│       ├── runs.py      # /api/runs/*
+│       ├── inventory.py # /api/inventory
+│       ├── items.py     # /api/items/*
+│       ├── prices.py    # /api/prices/*
+│       ├── stats.py     # /api/stats/*
+│       ├── icons.py     # /api/icons/*
+│       ├── settings.py  # /api/settings/*
+│       ├── cloud.py     # /api/cloud/*
+│       ├── time.py      # /api/time/*
+│       └── update.py    # /api/update/*
+├── cli/
+│   └── commands.py      # CLI 명령어 (init, serve, tail 등)
+├── collector/
+│   └── collector.py     # 메인 수집 루프 (로그 감시 + 이벤트 처리)
+├── config/
+│   ├── logging.py       # 로깅 설정
+│   ├── paths.py         # 경로 해석 (frozen/source 모드)
+│   ├── preferences.py   # 사용자 설정 (JSON 파일)
+│   └── settings.py      # 앱 설정 + 로그 파일 자동 탐지
+├── core/
+│   ├── models.py        # 도메인 모델 (Run, ItemDelta, SlotState 등)
+│   ├── delta_calculator.py  # 슬롯 상태 기반 델타 계산
+│   ├── run_segmenter.py     # 맵 런 경계 추적
+│   └── time_tracker.py      # 플레이 시간 추적
+├── data/
+│   ├── fallback_prices.py   # 폴백 가격 데이터
+│   ├── icon_urls.py         # 아이콘 URL 매핑
+│   ├── inventory.py         # 인벤토리 탭 필터링 (EXCLUDED_PAGES)
+│   ├── korean_names.py      # 한국어 아이템 이름 로더
+│   └── zones.py             # 존 이름 번역 + 존 분류
+├── db/
+│   ├── connection.py    # SQLite 연결 관리 (WAL, 스레드 안전)
+│   ├── repository.py    # CRUD 오퍼레이션 (모든 엔티티)
+│   └── schema.py        # DDL 스키마 + 마이그레이션
+├── parser/
+│   ├── exchange_parser.py   # 거래소 가격 메시지 파서
+│   ├── log_parser.py        # 로그 라인 → 타입 이벤트 변환
+│   ├── log_tailer.py        # 로그 파일 증분 읽기
+│   ├── patterns.py          # 정규식 패턴 (컴파일됨)
+│   └── player_parser.py     # 플레이어 정보 파싱
+├── sync/
+│   ├── client.py        # Supabase 클라이언트 래퍼
+│   ├── device.py        # 익명 디바이스 ID
+│   └── manager.py       # 클라우드 동기화 오케스트레이터
+├── updater/
+│   ├── github_client.py # GitHub 릴리스 API
+│   ├── installer.py     # 자동 업데이트 설치
+│   └── manager.py       # 업데이트 관리자
+└── web/
+    └── static/
+        ├── index.html   # 메인 대시보드 (한국어)
+        ├── app.js       # 프론트엔드 로직
+        └── style.css    # 스타일
 ```
 
-### Adding/Updating Korean Translations
+---
 
-1. Edit [items_ko.json](src/titrack/data/items_ko.json) to add new items
-2. Use ConfigBaseId (integer) as the JSON key (as string)
-3. Include `name`, `type`, and `price` fields (price unused, kept for compatibility)
-4. Rebuild with PyInstaller to bundle updated translations
+## 4. 핵심 데이터 개념
 
-### Korean-Specific Defaults
+| 개념 | 설명 |
+|------|------|
+| **FE** | Flame Elementium, 기본 통화 (ConfigBaseId = `100300`) |
+| **ConfigBaseId** | 아이템 타입 식별자 (정수) |
+| **Delta** | `현재 Num - 이전 Num` (슬롯별 변화량) |
+| **SlotState** | `(PlayerID, PageId, SlotId)` → `(ConfigBaseId, Num)` |
+| **Run** | 맵 진입 → 퇴장 구간 (is_hub=False인 것만 추적) |
+| **EventContext** | PICK_ITEMS / MAP_OPEN / OTHER |
 
-Several settings have different defaults for Korean users (defined in [preferences.py](src/titrack/config/preferences.py)):
-- `trade_tax_enabled`: `True` (enabled by default)
-- `map_costs_enabled`: `True` (enabled by default)
+---
 
-## Tech Stack
-
-- **Language:** Python 3.11+
-- **Backend:** FastAPI + Uvicorn
-- **Database:** SQLite (WAL mode)
-- **Frontend:** React (or HTML/HTMX for MVP)
-- **Packaging:** PyInstaller (--onedir preferred)
-- **Target:** Windows 10/11
-
-## Build Commands
+## 5. 빌드 & 개발 명령어
 
 ```bash
-# Testing
-pytest tests/                    # Run all tests
-pytest tests/ -v                # Verbose output
+# 개발 서버
+python -m titrack serve                # 네이티브 윈도우
+python -m titrack serve --no-window    # 브라우저 모드 (디버깅)
 
-# Linting
+# 테스트
+pytest tests/                          # 전체 테스트
+pytest tests/ -v                       # 상세 출력
+
+# 린팅
 black .
 ruff check .
 
-# Build main application (PyInstaller)
+# PyInstaller 빌드
 python -m PyInstaller ti_tracker.spec --noconfirm
 
-# Build TITrack-Setup.exe (C# portable extractor)
+# Setup.exe 빌드 (C# 포터블 추출기)
 dotnet publish setup/TITrackSetup.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o setup/publish
-
-# Development server
-python -m titrack serve
-python -m titrack serve --no-window    # Browser mode (for debugging)
 ```
 
-## Release Process
+---
 
-Each release includes two files:
-- `TITrack-Setup.exe` - Recommended for users (avoids Windows MOTW security issues)
-- `TITrack-x.x.x-windows.zip` - For advanced users who prefer manual extraction
+## 6. 릴리스 프로세스
 
-### Steps to Release
-
-1. **Update version** in both files:
+1. **버전 업데이트** (두 파일 동기화 필수):
    - `pyproject.toml` → `version = "x.x.x"`
    - `src/titrack/version.py` → `__version__ = "x.x.x"`
 
-2. **Build main application**:
-   ```bash
-   python -m PyInstaller ti_tracker.spec --noconfirm
-   ```
+2. **빌드**: `python -m PyInstaller ti_tracker.spec --noconfirm`
 
-3. **Create ZIP**:
-   ```powershell
-   Compress-Archive -Path dist\TITrack -DestinationPath dist\TITrack-x.x.x-windows.zip -Force
-   ```
+3. **ZIP 생성**: `Compress-Archive -Path dist\TITrack -DestinationPath dist\TITrack-x.x.x-windows.zip -Force`
 
-4. **Build Setup.exe**:
-   ```bash
-   dotnet publish setup/TITrackSetup.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o setup/publish
-   ```
+4. **Setup.exe**: `dotnet publish setup/TITrackSetup.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o setup/publish`
 
-5. **Commit, tag, and push**:
-   ```bash
-   git add -A && git commit -m "Release vx.x.x"
-   git tag vx.x.x && git push origin master && git push origin vx.x.x
-   ```
+5. **커밋 & 태그**: `git add -A && git commit -m "Release vx.x.x" && git tag vx.x.x && git push origin master && git push origin vx.x.x`
 
-6. **Create GitHub release** with both files:
-   ```bash
-   gh release create vx.x.x setup/publish/TITrack-Setup.exe dist/TITrack-x.x.x-windows.zip --title "vx.x.x" --notes "Release notes here"
-   ```
+6. **GitHub 릴리스**: `gh release create vx.x.x setup/publish/TITrack-Setup.exe dist/TITrack-x.x.x-windows.zip --title "vx.x.x" --notes "..."`
 
-### Code Signing (Optional)
+---
 
-If you have an OV/EV code signing certificate:
-```powershell
-# Sign both executables
-signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /a "setup\publish\TITrack-Setup.exe"
-signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /a "dist\TITrack\TITrack.exe"
-```
+## 7. 데이터베이스 스키마
 
-Sign before creating the ZIP and uploading to GitHub.
+**버전**: 3 (Cloud Sync 지원)
 
-## Setup Project (TITrack-Setup.exe)
+| 테이블 | PK | 설명 |
+|--------|-----|------|
+| `settings` | key | 키/값 설정 |
+| `runs` | id (AUTO) | 맵 런 인스턴스 |
+| `item_deltas` | id (AUTO) | 아이템 변화량 (run_id FK) |
+| `slot_state` | (player_id, page_id, slot_id) | 현재 인벤토리 |
+| `items` | config_base_id | 아이템 메타데이터 |
+| `prices` | (config_base_id, season_id) | 가격 정보 |
+| `log_position` | id=1 | 로그 읽기 위치 |
+| `cloud_sync_queue` | id (AUTO) | 업로드 대기열 |
+| `cloud_price_cache` | (config_base_id, season_id) | 클라우드 가격 캐시 |
+| `cloud_price_history` | (config_base_id, season_id, hour_bucket) | 가격 히스토리 |
 
-Located in `setup/` folder. A lightweight C# WinForms application (~174 KB) that:
-- Downloads the latest release ZIP from GitHub
-- Extracts to user-chosen location (portable, no installation)
-- Avoids Mark of the Web (MOTW) issues since programmatic downloads aren't marked
-- Optional desktop shortcut creation
+---
 
-The Setup.exe automatically fetches the latest release from GitHub API, so it doesn't need rebuilding for every release unless functionality changes.
-
-**Requirements to build**: .NET 8 SDK (`winget install Microsoft.DotNet.SDK.8`)
-
-## Architecture
-
-Five main components:
-
-1. **Collector (Log Tailer + Parser)** - Watches TI log file, parses events, computes item deltas
-2. **Local Database (SQLite)** - Stores runs, deltas, slot state, prices, settings
-3. **Price Engine** - Maps ConfigBaseId to price_fe, learns prices from Exchange searches
-4. **Local Web UI** - FastAPI serves REST API + static files, opens in browser
-5. **Packaged App** - PyInstaller EXE that starts all services
-
-## Key Data Concepts
-
-- **FE (Flame Elementium):** Primary valuation currency, ConfigBaseId = `100300`
-- **ConfigBaseId:** Integer item type identifier from game logs
-- **Delta tracking:** Logs report absolute stack totals (`Num=`), tracker computes changes vs previous state
-- **Slot state:** Tracked per `(PageId, SlotId)` with current `(ConfigBaseId, Num)`
-
-## Log Parsing
-
-**Log file locations (auto-detected):**
-- **Steam:** `<SteamLibrary>\steamapps\common\Torchlight Infinite\UE_Game\Torchlight\Saved\Logs\UE_game.log`
-- **Standalone client:** `<InstallDir>\Game\UE_game\Torchlight\Saved\Logs\UE_game.log`
-
-TITrack automatically checks common installation paths for both Steam and the standalone client. If the game is installed in a non-standard location, TITrack will prompt for the game directory on startup. The setting is saved to the database (`log_directory` in settings table) and persists across restarts.
-
-**Flexible path input:** Users can provide the game root folder, the Logs folder, or the direct path to `UE_game.log` - TITrack will resolve any of these to the correct log file location.
-
-**Key patterns to parse:**
-
-```text
-# Item pickup block
-GameLog: Display: [Game] ItemChange@ ProtoName=PickItems start
-GameLog: Display: [Game] BagMgr@:Modfy BagItem PageId = 102 SlotId = 0 ConfigBaseId = 100300 Num = 671
-GameLog: Display: [Game] ItemChange@ ProtoName=PickItems end
-
-# Inventory snapshot (triggered by sorting inventory in-game)
-GameLog: Display: [Game] BagMgr@:InitBagData PageId = 102 SlotId = 0 ConfigBaseId = 100300 Num = 609
-
-# Map boundaries
-LevelMgr@ EnterLevel ...
-LevelMgr@ OpenLevel ...
-```
-
-**Parsing rules:**
-- Incremental tail (handle log rotation)
-- Delta = current `Num` - previous `Num` for same slot/item
-- Tag changes inside PickItems block as "pickup-related"
-- Handle unknown ConfigBaseIds gracefully (show as "Unknown <id>")
-- `InitBagData` events update slot state but don't create deltas (used for inventory sync)
-
-## Database Schema (Core Tables)
-
-- `settings` - key/value config
-- `runs` - map instances (start_ts, end_ts, zone_sig, level_id, level_type, level_uid)
-- `item_deltas` - per-item changes with run_id, context, proto_name
-- `slot_state` - current inventory state per (page_id, slot_id)
-- `items` - item metadata (name, icon_url, category)
-- `prices` - item valuation (price_fe, source, updated_ts)
-
-## Item Database
-
-`tlidb_items_seed_en.json` contains 1,811 items with:
-- `id` (ConfigBaseId as string)
-- `name_en`, `name_cn`
-- `img` (icon URL)
-- `url_en`, `url_cn` (TLIDB links)
-
-Seeds the `items` table on first run.
-
-## File Locations
-
-| File | Purpose |
-|------|---------|
-| `TI_Local_Loot_Tracker_PRD.md` | Complete requirements document |
-| `tlidb_items_seed_en.json` | Item database seed (1,811 items) |
-
-## Storage Locations (Runtime)
-
-- Default: `%LOCALAPPDATA%\TITracker\tracker.db`
-- Portable mode: `.\data\tracker.db` beside exe
-
-## Native Window Mode
-
-The packaged EXE runs in a native window using pywebview (EdgeChromium on Windows) instead of opening in the default browser. This provides a cleaner user experience with no visible CLI window.
-
-- **Window title**: "TITrack - Torchlight Infinite Loot Tracker"
-- **Default size**: 1280x800, minimum 800x600
-- **Shutdown**: Closing the window gracefully stops all services
-- **Browser fallback**: If pywebview/pythonnet fails (e.g., due to Windows MOTW blocking DLLs), the app automatically falls back to browser mode with an Exit button
-
-For debugging, run with `--no-window` flag to use browser mode instead:
-```bash
-TITrack.exe --no-window
-```
-
-### Windows Mark of the Web (MOTW) Issue
-
-Files downloaded from the internet are marked by Windows as untrusted. This can prevent pythonnet DLLs from loading, causing native window mode to fail.
-
-**Solutions:**
-1. **Use TITrack-Setup.exe** (recommended) - Downloads programmatically, no MOTW
-2. **Unblock after extracting**: `Get-ChildItem -Path "C:\TITrack" -Recurse | Unblock-File`
-3. **Code signing** - Signed executables bypass MOTW restrictions
-
-## Logging
-
-All console output is redirected to a log file when running as a packaged EXE:
-- **Portable mode**: `.\data\titrack.log` beside exe
-- **Default**: `%LOCALAPPDATA%\TITracker\titrack.log`
-
-Log rotation:
-- Maximum file size: 5MB
-- Keeps 3 backup files (titrack.log.1, .2, .3)
-
-In development mode (non-frozen), logs also output to console.
-
-## MVP Requirements
-
-1. Select & persist log file path
-2. Tail log, parse PickItems + BagMgr updates
-3. Compute deltas, store in DB
-4. Segment runs (EnterLevel-based boundaries)
-5. Display FE gained per run, profit/hr
-6. Automatic price learning from Exchange searches
-7. Net worth from latest inventory
-8. Packaged portable EXE
-
-## API Endpoints
+## 8. API 엔드포인트
 
 ### Runs
-- `GET /api/runs` - List recent runs with pagination
-- `GET /api/runs/active` - Get currently active run with live loot drops
-- `GET /api/runs/stats` - Summary statistics (value/hour, avg per run, etc.)
-- `GET /api/runs/report` - Cumulative loot statistics across all runs
-- `GET /api/runs/report/csv` - Export loot report as CSV file
-- `GET /api/runs/{run_id}` - Get single run details
-- `POST /api/runs/reset` - Clear all run tracking data (preserves prices, items, settings)
-
-### Items
-- `GET /api/items` - List items (with search)
-- `GET /api/items/{id}` - Get item by ConfigBaseId
-- `PATCH /api/items/{id}` - Update item name
-
-### Prices
-- `GET /api/prices` - List all prices (filtered by current season)
-- `GET /api/prices/export` - Export prices as seed-compatible JSON
-- `POST /api/prices/migrate-legacy` - Migrate legacy prices (season_id=0) to current season
-- `GET /api/prices/{id}` - Get price for item
-- `PUT /api/prices/{id}` - Update price
-
-### Stats
-- `GET /api/stats/history` - Time-series data for charts
-- `GET /api/stats/zones` - List all zones encountered (for translation)
-
-### Icons
-- `GET /api/icons/{id}` - Proxy icon from CDN (handles headers server-side, caches results)
-
-### Player
-- `GET /api/player` - Current player/character info (name, season)
-
-### Other
-- `GET /api/inventory` - Current inventory state
-- `GET /api/status` - Server status
-
-## Dashboard Features
-
-- **Stats Header**: Net Worth, Value/Hour, Value/Map, Runs, Avg Run Time, Prices count
-- **Charts**: Cumulative Value, Value/Hour (rolling)
-- **Current Run Panel**: Live drops display during active map runs (sorted by value, shows costs when enabled)
-- **Recent Runs**: Zone, duration, value with details modal (shows net value when costs enabled)
-- **Current Inventory**: Sortable by quantity or value
-- **Controls**: Cloud Sync toggle, Settings button, Reset Stats, Auto-refresh toggle
-- **Settings Modal**: Trade Tax toggle, Map Costs toggle, Game Directory configuration (with Browse button in native window mode)
-
-## Loot Report
-
-The "Report" button in the Recent Runs section opens a modal showing cumulative loot statistics across all runs since the last reset.
-
-### Summary Stats
-
-- **Gross Value**: Total value of all loot picked up in maps
-- **Map Costs**: Total cost of compasses/beacons consumed (only shown if Map Costs setting enabled)
-- **Profit**: Gross Value minus Map Costs
-- **Runs**: Number of completed map runs
-- **Total Time**: Combined duration of all map runs
-- **Profit/Hour**: Profit divided by total time spent in maps
-- **Profit/Map**: Average profit per map run
-- **Unique Items**: Number of distinct item types collected
-
-### Chart
-
-A doughnut chart visualizes the top 10 items by value, with remaining items grouped as "Other". The legend shows item names with percentages.
-
-### Table
-
-A scrollable table lists all items with:
-- Icon and name
-- Quantity collected
-- Unit price (from local or cloud pricing)
-- Total value (quantity × unit price)
-- Percentage of total value
-
-Items without known prices show "--" and appear at the bottom.
-
-### CSV Export
-
-Click "Export CSV" to save the report. A native "Save As" dialog lets you choose the file location. The CSV includes:
-- All items with quantities, prices, and values
-- Summary section with all stats
-
-### Data Filtering
-
-- Only includes items picked up during map runs (excludes trade house purchases, crafting, etc.)
-- Excludes map costs (Spv3Open events) from loot totals
-- Excludes gear page items (PageId 100)
-- Respects Trade Tax setting when calculating values
-
-## Trade Tax
-
-The Torchlight trade house takes a 12.5% tax (1 FE per 8 FE). Enable the "Trade Tax" toggle in Settings to see after-tax values:
-- Applied to non-FE items only (FE currency is not taxed)
-- Affects: Run values, inventory net worth, value/hour calculations
-- Setting stored in database as `trade_tax_enabled`
-
-## Map Costs
-
-When enabled, TITrack tracks compass/beacon consumption when opening maps and subtracts these costs from run values.
-
-### How It Works
-
-1. When you open a map with a compass/beacon, the game logs an `ItemChange@ ProtoName=Spv3Open` block
-2. TITrack captures these consumption events and associates them with the next map run
-3. Run values show net profit (gross loot value minus map cost)
-
-### Enabling Map Costs
-
-Click the gear icon (Settings) in the header and enable "Map Costs" toggle.
-
-### Display
-
-When map costs are enabled:
-- **Recent Runs table**: Shows net value (with warning icon if some costs are unpriced)
-- **Run Details modal**: Shows map costs section with consumed items, followed by summary (Gross / Cost / Net)
-- **Current Run panel**: Shows net value with cost breakdown
-- **Stats**: Value/Hour and Value/Map reflect net values after costs
-
-### Unknown Prices
-
-If a consumed item doesn't have a known price:
-- The item shows "?" instead of a value with tooltip
-- A warning icon appears next to the run value
-- The cost is excluded from calculations (only priced items are summed)
-- Search the item on the Exchange to learn its price
-
-### Settings
-
-- Setting stored in database as `map_costs_enabled`
-- Default: disabled (gross values shown)
-
-## Zone Translation
-
-Zone names are mapped in `src/titrack/data/zones.py`. The `ZONE_NAMES` dictionary maps internal zone path patterns to English display names. Use `/api/stats/zones` to see all encountered zones and identify which need translation.
-
-## Price Seeding
-
-Prices can be seeded on init: `titrack init --seed items.json --prices-seed prices.json`
-
-Export current prices via `GET /api/prices/export`.
-
-## Zone Differentiation
-
-Some zones share the same internal path across different areas (e.g., "Grimwind Woods" appears in both Glacial Abyss and Voidlands with the same path `YL_BeiFengLinDi201`).
-
-These are differentiated using `LevelId` from the game logs:
-- The `LevelMgr@ LevelUid, LevelType, LevelId` line is parsed before zone transitions
-- LevelId format: `XXYY` where `XX` = Timemark tier, `YY` = zone identifier
-- For ambiguous zones, `level_id % 100` extracts the zone suffix to determine the region
-
-### LevelId Structure
-
-| Timemark | XX Value |
-|----------|----------|
-| 7-0 | 46 |
-| 8-0 | 50 |
-| 8-1 | 51 |
-| 8-2 | 52 |
-| etc. | +1 per sub-tier |
-
-### Ambiguous Zone Suffixes
-
-| Zone | Suffix | Region |
-|------|--------|--------|
-| Grimwind Woods | 06 | Glacial Abyss |
-| Grimwind Woods | 54 | Voidlands |
-| Elemental Mine | 12 | Blistering Lava Sea |
-| Elemental Mine | 55 | Voidlands |
-| Demiman Village | 36 | Glacial Abyss |
-
-To add a new ambiguous zone:
-1. Run the zone and check the log for `LevelMgr@ LevelUid, LevelType, LevelId = X Y ZZZZ`
-2. The last 2 digits of LevelId are the zone suffix
-3. Add the suffix mapping to `AMBIGUOUS_ZONES` in `src/titrack/data/zones.py`
-
-For special zones (bosses, secret realms) that don't follow the XXYY pattern, add exact LevelId mappings to `LEVEL_ID_ZONES`.
-
-## Inventory Sync
-
-To sync your full inventory with the tracker, use the **Sort** button in-game:
-1. Open your inventory (bag)
-2. Click the Sort/Arrange button (auto-organizes items)
-3. The game logs `BagMgr@:InitBagData` lines for every slot
-4. TITrack captures these and updates slot state without creating deltas
-
-This is useful when:
-- Starting the tracker for the first time (existing inventory not tracked)
-- Inventory state gets out of sync
-- You want to ensure accurate net worth calculation
-
-## Player Info & Multi-Character Support
-
-Player/character information is parsed from the main game log (`UE_game.log`). The parser looks for lines containing `+player+Name`, `+player+SeasonId`, etc.
-
-- **Name**: Player's character name
-- **SeasonId**: League/season identifier (mapped to display name in `player_parser.py`)
-
-The dashboard displays the character name and season name in the header.
-
-### Automatic Character Detection
-
-TITrack detects characters by monitoring player data lines in the **live** log stream. On startup, the app shows "Waiting for character login..." until a character is detected.
-
-**Important**: You must log in (or relog) your character **after** starting TITrack for it to detect your character. Historical player data from before TITrack started is not read.
-
-When you switch characters in-game, TITrack automatically detects the change:
-
-1. Player data lines (`+player+Name`, `+player+SeasonId`, etc.) are parsed as they appear
-2. When a different character is detected, the collector switches context
-3. Inventories, runs, and prices are isolated per character/season
-
-### Data Isolation
-
-Each character has isolated data using an **effective player ID**:
-- If the log contains a `PlayerId`, that is used
-- Otherwise, `{season_id}_{name}` is used as the identifier (e.g., `1301_MyChar`)
-
-This ensures:
-- **Inventory**: Each character has separate slot states
-- **Runs/Deltas**: Tagged with season_id and player_id
-- **Prices**: Isolated per season (seasonal vs permanent economies are separate)
-
-### Migrating Legacy Prices
-
-If you have prices from before multi-season support was added, they may be stored with `season_id=0`. To migrate them to your current season:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/prices/migrate-legacy
+- `GET /api/runs` - 최근 런 목록
+- `GET /api/runs/active` - 현재 활성 런 + 실시간 드롭
+- `GET /api/runs/stats` - 통계 요약
+- `GET /api/runs/report` - 누적 전리품 통계
+- `GET /api/runs/report/csv` - CSV 내보내기
+- `GET /api/runs/{run_id}` - 런 상세
+- `POST /api/runs/reset` - 데이터 초기화
+
+### Items / Prices
+- `GET /api/items`, `GET /api/items/{id}`, `PATCH /api/items/{id}`
+- `GET /api/prices`, `GET /api/prices/{id}`, `PUT /api/prices/{id}`
+- `GET /api/prices/export`, `POST /api/prices/migrate-legacy`
+
+### Stats / Player / Other
+- `GET /api/stats/history`, `GET /api/stats/zones`
+- `GET /api/icons/{id}` - CDN 프록시
+- `GET /api/player` - 현재 캐릭터
+- `GET /api/inventory` - 인벤토리
+- `GET /api/status` - 서버 상태
+- `GET /api/cloud/status`, `POST /api/cloud/toggle`, `POST /api/cloud/sync`
+- `GET /api/cloud/prices`, `GET /api/cloud/prices/{id}/history`
+- `GET /api/time/*`, `POST /api/time/*` - 시간 추적
+- `GET /api/update/*` - 자동 업데이트
+
+---
+
+## 9. 로그 파싱 패턴
+
+### 로그 파일 위치 (자동 탐지)
+- Steam: `<SteamLibrary>/steamapps/common/Torchlight Infinite/UE_Game/Torchlight/Saved/Logs/UE_game.log`
+- 독립 클라이언트: `<InstallDir>/Game/UE_game/Torchlight/Saved/Logs/UE_game.log`
+
+### 핵심 파싱 패턴 (`patterns.py`)
+```
+BAG_MODIFY_PATTERN  → BagMgr@:Modfy BagItem (아이템 변경)
+BAG_INIT_PATTERN    → BagMgr@:InitBagData (인벤토리 스냅샷)
+ITEM_CHANGE_PATTERN → ItemChange@ ProtoName=... start/end (컨텍스트)
+LEVEL_EVENT_PATTERN → SceneLevelMgr@ OpenMainWorld (존 전환)
+LEVEL_ID_PATTERN    → LevelMgr@ LevelUid, LevelType, LevelId (존 분류)
+CUR_RUN_VIEW_PATTERN → CurRunView = (UI 뷰 변경 / 자동 일시정지)
 ```
 
-Run this while logged in as the character whose economy should receive the prices.
+### 파싱 규칙
+- PickItems 블록 내 BagMgr 이벤트 = 아이템 획득
+- InitBagData = 인벤토리 동기화 (델타 없음, 슬롯 상태만 갱신)
+- Spv3Open = 맵 비용 (나침반/비콘 소모)
+- PageId 100 (장비 탭) = 추적 제외
 
-## Inventory Tab Filtering
+---
 
-The game inventory has 4 tabs identified by PageId:
-- **PageId 100**: Gear (equipment) - **EXCLUDED from tracking**
-- **PageId 101**: Skill
-- **PageId 102**: Commodity (currency, crafting materials)
-- **PageId 103**: Misc
+## 10. 한국어 로컬라이제이션
 
-The Gear tab is excluded because gear prices are too dependent on specific affixes to be reliably tracked. This filtering is defined in `src/titrack/data/inventory.py` and applied at:
-- Collector level (bag events from excluded pages are skipped)
-- Repository queries (slot states and deltas filtered by default)
+### 번역 파일
+| 파일 | 용도 |
+|------|------|
+| `src/titrack/data/items_ko.json` | ConfigBaseId → 한국어 이름 |
+| `src/titrack/data/korean_names.py` | 번역 로더 |
 
-To modify which tabs are tracked, edit `EXCLUDED_PAGES` in `src/titrack/data/inventory.py`.
+### items_ko.json 형식
+```json
+{
+  "100300": { "name": "화염 원소", "type": "화폐", "price": 0 }
+}
+```
 
-## Cloud Sync (Crowd-Sourced Pricing)
+### 이름 해석 체인 (`repository.py:444`)
+1. `get_korean_name(config_base_id)` → 한국어
+2. `get_item().name_en` → 영어
+3. `f"알 수 없음 {config_base_id}"` → 폴백
 
-TITrack supports opt-in cloud sync to share and receive community pricing data.
+---
 
-### Features
+## 11. 주요 기능 상세
 
-- **Anonymous**: Uses device-based UUIDs, no user accounts required
-- **Opt-in**: Disabled by default, toggle in the UI header
-- **Offline-capable**: Works fully offline, syncs when connected
-- **Cloud-first pricing**: Cloud prices are used by default, local prices override only when newer
+### 거래세 (Trade Tax)
+- 12.5% (1 FE / 8 FE), 비-FE 아이템에만 적용
+- `get_trade_tax_multiplier()` → 0.875 또는 1.0
 
-### How It Works
+### 맵 비용 (Map Costs)
+- `Spv3Open` 이벤트로 감지, 다음 런에 연결
+- 런 순가치 = 총 전리품 - 맵 비용
 
-1. When you search an item in the in-game Exchange, TITrack captures the prices
-2. If cloud sync is enabled, the price data is queued for upload
-3. Background threads upload your submissions and download community prices
-4. Community prices are used for inventory valuation and run value calculations
+### 가격 우선순위 (`get_effective_price()`)
+1. Exchange 가격 (최신일 경우)
+2. Cloud 가격 (커뮤니티 중앙값)
+3. 로컬 가격
+4. 폴백 가격 (`fallback_prices.py`)
 
-### Pricing Priority
+### 시간 추적 (TimeTracker)
+- 총 플레이 시간 (수동 시작/정지)
+- 맵핑 시간 (자동, 맵 진입/퇴장)
+- UI 뷰 기반 자동 일시정지 (인벤토리, 거래소 등)
+- 수술(Surgery) 통계 추적
 
-The `get_effective_price()` method implements cloud-first pricing logic:
+### 멀티 캐릭터 지원
+- Effective Player ID: `player_id` 또는 `{season_id}_{name}`
+- 인벤토리/런/가격이 캐릭터별 격리
+- 라이브 로그에서 캐릭터 전환 자동 감지
 
-1. **Cloud price is the default** - Community aggregate (median) is more reliable
-2. **Local price overrides only if newer** - Compares `local.updated_at` vs `cloud.cloud_updated_at`
-3. If only one source exists, that price is used
-4. If timestamp comparison fails, defaults to cloud price
+---
 
-This means:
-- Fresh install with cloud sync enabled → uses cloud prices immediately
-- You search an item in Exchange → local price saved with current timestamp
-- If your local search is newer than cloud data → your price is used
-- When cloud data is updated → cloud price takes over again
+## 12. 알려진 제한사항 / Blockers
 
-### API Endpoints
+| ID | 설명 | Workaround |
+|----|------|-----------|
+| BLK-1 | Supabase 백엔드 미구성 | 로컬 전용 모드 사용 |
+| BLK-2 | 코드 서명 없음 (MOTW) | TITrack-Setup.exe 또는 Unblock-File |
+| LIMIT-1 | Timemark 레벨 미추적 | 같은 존은 통합 표시 |
 
-- `GET /api/cloud/status` - Sync status, queue counts, last sync times
-- `POST /api/cloud/toggle` - Enable/disable cloud sync
-- `POST /api/cloud/sync` - Manual sync trigger
-- `GET /api/cloud/prices` - Cached community prices
-- `GET /api/cloud/prices/{id}/history` - Price history for sparklines
+---
 
-### Settings API
+## 13. 저장 경로
 
-- `GET /api/settings/{key}` - Get setting (whitelisted keys only)
-- `PUT /api/settings/{key}` - Update setting
+| 모드 | DB 경로 | 로그 경로 |
+|------|---------|-----------|
+| 기본 | `%LOCALAPPDATA%\TITrack\tracker.db` | `%LOCALAPPDATA%\TITracker\titrack.log` |
+| 포터블 | `.\data\tracker.db` | `.\data\titrack.log` |
 
-### Database Tables (Cloud Sync)
+---
 
-- `cloud_sync_queue` - Prices waiting to upload
-- `cloud_price_cache` - Downloaded community prices
-- `cloud_price_history` - Hourly price snapshots for sparklines
+## 14. 참고 문서
 
-### Settings Keys
+| 파일 | 용도 |
+|------|------|
+| [`docs/Tasks.md`](docs/Tasks.md) | 작업 관리 (작업 전 필수 확인) |
+| [`TI_Local_Loot_Tracker_PRD.md`](TI_Local_Loot_Tracker_PRD.md) | 요구사항 문서 |
+| [`TITrack_Architecture.md`](TITrack_Architecture.md) | 시스템 아키텍처 |
+| [`.claude/agents/backend-agent.md`](.claude/agents/backend-agent.md) | 백엔드 에이전트 설정 |
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `cloud_sync_enabled` | `"false"` | Master toggle |
-| `cloud_device_id` | (generated) | Anonymous device UUID |
-| `cloud_upload_enabled` | `"true"` | Upload prices to cloud |
-| `cloud_download_enabled` | `"true"` | Download prices from cloud |
-
-### Sparklines (Price Trend Charts)
-
-The inventory panel shows sparkline charts in the "Trend" column when cloud sync is enabled. These mini-charts visualize price history over time.
-
-**How sparklines work:**
-1. When the inventory renders, sparkline canvases are created for items with cloud prices
-2. History data is lazy-loaded from `/api/cloud/prices/{id}/history` for each item
-3. Results are cached to avoid redundant fetches
-
-**Visual indicators:**
-- **Green line**: Price trending up (>1% increase from first to last point)
-- **Red line**: Price trending down (>1% decrease)
-- **Gray line**: Price stable (within ±1%)
-- **Dashed gray line**: Insufficient history data (fewer than 2 data points)
-- **Three dots**: Loading state while fetching history
-
-**Sparkline vs. Community indicator:**
-- **Sparklines** appear for any item with a cloud price (even single contributor)
-- **Community indicator** (dot next to item name) only appears for prices with 3+ contributors
-
-Click any sparkline to open the full price history modal with detailed chart.
-
-### Supabase Backend (Not Configured)
-
-Cloud sync requires a Supabase backend. The backend is NOT configured by default. To enable:
-
-1. Create a Supabase project
-2. Run the SQL migrations to create tables and functions
-3. Set environment variables:
-   - `TITRACK_SUPABASE_URL` - Your project URL
-   - `TITRACK_SUPABASE_KEY` - Your anon key
-4. Or update the defaults in `src/titrack/sync/client.py`
-
-Install the Supabase SDK: `pip install titrack[cloud]`
-
-## Known Limitations / TODO
-
-- **Timemark level not tracked**: The game log zone paths are identical regardless of Timemark level (e.g., 7-0 vs 8-0). Runs of the same zone are grouped together. To support per-Timemark tracking, would need to find another log line that indicates the Timemark level (possibly when selecting beacon or starting map) or add manual run tagging in the UI.
-- **Cloud sync backend not configured**: The Supabase backend URLs/keys need to be configured before cloud sync will work.
+---
 
 Output Rules:
 

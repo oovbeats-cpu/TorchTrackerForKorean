@@ -30,6 +30,7 @@ class TimeState(BaseModel):
     pause_settings: PauseSettingsModel = PauseSettingsModel()
     surgery_prep_start_ts: Optional[float] = None
     surgery_total_seconds: float = 0.0
+    current_map_play_seconds: float = 0.0
 
 
 class ToggleResponse(BaseModel):
@@ -82,6 +83,7 @@ def get_time_state(request: Request) -> TimeState:
         ),
         surgery_prep_start_ts=surgery_prep_ts,
         surgery_total_seconds=state.surgery_total_seconds,
+        current_map_play_seconds=state.current_map_play_seconds,
     )
 
 

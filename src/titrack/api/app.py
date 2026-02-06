@@ -133,7 +133,7 @@ def create_app(
             log_path=str(log_path) if log_path else None,
             log_path_missing=log_path is None,
             item_count=repo.get_item_count(),
-            run_count=len(repo.get_recent_runs(limit=10000)),
+            run_count=repo.get_completed_run_count(),
             awaiting_player=app.state.player_info is None,
         )
 

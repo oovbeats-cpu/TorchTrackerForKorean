@@ -3,7 +3,7 @@
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from titrack.config.logging import get_logger
 from titrack.core.delta_calculator import DeltaCalculator
@@ -99,7 +99,7 @@ class Collector:
         self.repository.set_player_context(self._season_id, self._player_id)
 
         # Track pending player data from streaming log (for character change detection)
-        self._pending_player_data: dict[str, any] = {}
+        self._pending_player_data: dict[str, Any] = {}
         self._player_data_last_update: Optional[datetime] = None
         self._player_data_batch_threshold_seconds = 2.0  # New player data if > 2 seconds gap
         self._player_data_max_age_seconds = 30.0  # Discard incomplete batches older than this

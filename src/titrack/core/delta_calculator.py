@@ -79,6 +79,7 @@ class DeltaCalculator:
                 slot_id=event.slot_id,
                 config_base_id=event.config_base_id,
                 num=0,
+                raw_line=event.raw_line,
                 is_init=event.is_init,
             )
 

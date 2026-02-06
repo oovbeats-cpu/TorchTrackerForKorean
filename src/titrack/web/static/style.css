@@ -309,6 +309,10 @@ h6,
     white-space: nowrap;
 }
 
+.on-top-control {
+    margin-left: 4px;
+}
+
 .control-btn {
     background: transparent;
     border: 1px solid var(--border);

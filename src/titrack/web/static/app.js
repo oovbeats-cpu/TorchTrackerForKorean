@@ -105,6 +105,9 @@ function initFramelessMode() {
     // Listen for pywebview ready event (more reliable)
     window.addEventListener('pywebviewready', function() {
         showCustomTitlebar();
+        // Show always-on-top control in native window mode
+        const onTopControl = document.getElementById('on-top-control');
+        if (onTopControl) onTopControl.style.display = '';
     });
 }
 
@@ -779,6 +782,14 @@ function updateTimeDisplay() {
         avgRunTimeGrid.textContent = formatSecondsToMinSec(liveAvgRunSeconds);
     }
     
+    // Update current run duration display (synced with mapping timer)
+    if (currentRunState.isActive) {
+        const durationEl = document.getElementById('active-run-duration');
+        if (durationEl) {
+            durationEl.textContent = `(${formatDuration(currentRunState.duration_seconds)})`;
+        }
+    }
+
     if (timeState.total_play_state === 'playing') {
         playBtn.classList.add('hidden');
         pauseBtn.classList.remove('hidden');
@@ -831,7 +842,15 @@ async function syncTimeState() {
         if (state.avg_surgery_time_seconds > 0) {
             timeState.last_displayed_surgery_avg = state.avg_surgery_time_seconds;
         }
-        
+
+        // Sync current map play time from TimeTracker (pause-aware)
+        // Only update when actively in a map (mapping_play_state check prevents
+        // stale values from overwriting after map ends)
+        if (currentRunState.isActive && state.mapping_play_state !== 'stopped'
+            && state.current_map_play_seconds !== undefined) {
+            currentRunState.duration_seconds = state.current_map_play_seconds;
+        }
+
         if (state.pause_settings) {
             timeState.pause_settings = state.pause_settings;
         }
@@ -867,6 +886,35 @@ function initTimeTracking() {
     setInterval(syncTimeState, 5000);
 }
 
+function initAlwaysOnTop() {
+    const control = document.getElementById('on-top-control');
+    const checkbox = document.getElementById('always-on-top');
+
+    // Only show in native window mode (pywebview)
+    if (typeof window.pywebview !== 'undefined' && window.pywebview.api) {
+        control.style.display = '';
+    }
+
+    if (checkbox) {
+        // Load saved state
+        const saved = localStorage.getItem('alwaysOnTop');
+        if (saved === 'true') {
+            checkbox.checked = true;
+            if (window.pywebview && window.pywebview.api) {
+                window.pywebview.api.toggle_on_top(true);
+            }
+        }
+
+        checkbox.addEventListener('change', async (e) => {
+            const enabled = e.target.checked;
+            if (window.pywebview && window.pywebview.api) {
+                await window.pywebview.api.toggle_on_top(enabled);
+            }
+            localStorage.setItem('alwaysOnTop', enabled.toString());
+        });
+    }
+}
+
 function renderActiveRun(data, forceRender = false) {
     const panel = document.getElementById('active-run-panel');
     const zoneEl = document.getElementById('active-run-zone');
@@ -890,20 +938,20 @@ function renderActiveRun(data, forceRender = false) {
     }
     
     // Update currentRunState for live average calculation
+    // Use server's duration_seconds (now based on TimeTracker, excludes paused time)
     currentRunState.isActive = true;
     currentRunState.duration_seconds = data.duration_seconds || 0;
 
-    // Check if data changed (include cost data in hash)
+    // Check if data changed (exclude duration from hash - it's updated by local timer)
     const newHash = simpleHash({
         id: data.id,
         val: data.total_value,
-        dur: data.duration_seconds,
         loot: data.loot?.length,
         cost: data.map_cost_fe
     });
     if (!forceRender && newHash === lastActiveRunHash) {
-        // Just update duration (always changes)
-        durationEl.textContent = `(${formatDuration(data.duration_seconds)})`;
+        // Just update duration display from local timer state
+        durationEl.textContent = `(${formatDuration(currentRunState.duration_seconds)})`;
         return;
     }
     lastActiveRunHash = newHash;
@@ -912,7 +960,7 @@ function renderActiveRun(data, forceRender = false) {
     // Show panel and update content
     panel.classList.remove('hidden');
     zoneEl.textContent = data.zone_name;
-    durationEl.textContent = `(${formatDuration(data.duration_seconds)})`;
+    durationEl.textContent = `(${formatDuration(currentRunState.duration_seconds)})`;
 
     // Show value with cost info if map costs are enabled
     if (data.map_cost_fe !== null && data.map_cost_fe !== undefined && data.map_cost_fe > 0) {
@@ -3262,7 +3310,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize time tracking
     initTimeTracking();
-    
+
+    // Initialize always-on-top toggle
+    initAlwaysOnTop();
+
     // Scroll detection for scrollbar visibility
     let scrollTimeouts = {};
     
