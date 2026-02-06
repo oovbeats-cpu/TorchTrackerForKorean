@@ -93,6 +93,17 @@
   - `style.css`: `.on-top-control { margin-left: 4px; }` 추가
 - **결과**: 네이티브 윈도우 모드에서만 토글 표시, 브라우저 모드에서는 숨김, 앱 재시작 시 설정 유지
 
+### 2026-02-07 세션 #1
+
+#### [Frontend Agent] 인게임 오버레이 UI 파일 생성
+- **시작**: 인게임 오버레이를 위한 프론트엔드 파일 3개 생성 요청
+- **변경 파일**: `overlay.html`, `overlay.css`, `overlay.js` (모두 `src/titrack/web/static/`)
+- **생성 내역**:
+  1. `overlay.html`: 오버레이 메인 HTML - 현재 수익, 런 시간, 총 시간, FE/시간 표시 바 + 설정 패널 (불투명도, 닫기)
+  2. `overlay.css`: 반투명 다크 테마 스타일 - `pywebview-drag-region` 드래그 지원, 설정 패널, 슬라이더
+  3. `overlay.js`: API 폴링 (2초 간격) + 로컬 타이머 (1초 간격 보간) - `/api/runs/active`, `/api/time`, `/api/runs/performance` 엔드포인트 사용, 불투명도 설정 (localStorage 저장 + pywebview API 연동)
+- **결과**: 오버레이 프론트엔드 파일 3개 생성 완료 (백엔드 오버레이 윈도우 생성 로직은 별도 작업 필요)
+
 ---
 
 ## 미완료 작업 (Backlog)

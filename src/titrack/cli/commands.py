@@ -830,6 +830,47 @@ def _serve_with_window(args: argparse.Namespace, settings: Settings,
                     return enabled
                 return False
 
+            def set_overlay_opacity(self, value):
+                """Set overlay window opacity using Win32 API."""
+                try:
+                    import ctypes
+                    hwnd = ctypes.windll.user32.FindWindowW(None, "TITrack Overlay")
+                    if hwnd:
+                        GWL_EXSTYLE = -20
+                        WS_EX_LAYERED = 0x00080000
+                        LWA_ALPHA = 0x02
+                        ex_style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+                        ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED)
+                        alpha = int(max(0.1, min(1.0, float(value))) * 255)
+                        ctypes.windll.user32.SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA)
+                        return True
+                except Exception:
+                    pass
+                return False
+
+            def close_overlay(self):
+                """Close the overlay window."""
+                if hasattr(self, '_overlay') and self._overlay:
+                    try:
+                        self._overlay.destroy()
+                        self._overlay = None
+                    except Exception:
+                        pass
+
+            def toggle_overlay(self):
+                """Toggle overlay visibility. Returns new visibility state."""
+                if hasattr(self, '_overlay') and self._overlay:
+                    try:
+                        if self._overlay.hidden:
+                            self._overlay.show()
+                            return True
+                        else:
+                            self._overlay.hide()
+                            return False
+                    except Exception:
+                        pass
+                return False
+
         api = Api()
 
         # Create pywebview window
@@ -845,6 +886,28 @@ def _serve_with_window(args: argparse.Namespace, settings: Settings,
             js_api=api,
         )
         api.set_window(window)
+
+        # Create overlay window (optional - failure doesn't affect main app)
+        overlay_window = None
+        try:
+            overlay_window = webview.create_window(
+                'TITrack Overlay',
+                url=f"http://{host}:{port}/static/overlay.html",
+                width=420,
+                height=55,
+                frameless=True,
+                on_top=True,
+                easy_drag=True,
+                transparent=True,
+                resizable=False,
+                shadow=False,
+                js_api=api,
+            )
+            api._overlay = overlay_window
+            logger.info("Overlay window created")
+        except Exception as e:
+            logger.warning(f"Could not create overlay window: {e}")
+            overlay_window = None
 
         # Start webview (blocks until window is closed)
         webview.start()

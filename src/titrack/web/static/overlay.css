@@ -1,0 +1,171 @@
+/* TITrack Overlay Styles */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    overflow: hidden;
+    user-select: none;
+}
+
+.overlay-bar {
+    display: flex;
+    align-items: center;
+    background: rgba(18, 18, 30, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 6px 12px;
+    cursor: move;
+    position: relative;
+}
+
+.stats-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex: 1;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 10px;
+    min-width: 70px;
+}
+
+.stat-label {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.45);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    line-height: 1;
+    margin-bottom: 2px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.stat-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: #e0e0e0;
+    line-height: 1.2;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    white-space: nowrap;
+}
+
+.stat-value.profit {
+    color: #4ecca3;
+}
+
+.stat-value.profit.negative {
+    color: #e74c3c;
+}
+
+.stat-value.accent {
+    color: #ffd700;
+}
+
+.stat-divider {
+    width: 1px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.12);
+    flex-shrink: 0;
+}
+
+/* Settings button */
+.settings-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 4px;
+    margin-left: 4px;
+    border-radius: 4px;
+    transition: color 0.2s, background 0.2s;
+    line-height: 1;
+    -webkit-app-region: no-drag;
+}
+
+.settings-btn:hover {
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Settings panel */
+.settings-panel {
+    background: rgba(18, 18, 30, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 8px 12px;
+    margin-top: -1px;
+}
+
+.settings-panel.hidden {
+    display: none;
+}
+
+.setting-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.setting-label {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    min-width: 55px;
+}
+
+.opacity-slider {
+    flex: 1;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.opacity-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #4ecca3;
+    cursor: pointer;
+}
+
+.opacity-value {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    min-width: 30px;
+    text-align: right;
+}
+
+.close-overlay-btn {
+    background: rgba(231, 76, 60, 0.2);
+    border: 1px solid rgba(231, 76, 60, 0.4);
+    color: #e74c3c;
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+    width: 100%;
+}
+
+.close-overlay-btn:hover {
+    background: rgba(231, 76, 60, 0.4);
+}

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TITrack Overlay</title>
+    <link rel="stylesheet" href="/static/overlay.css">
+</head>
+<body>
+    <div class="overlay-bar pywebview-drag-region" id="overlay-bar">
+        <div class="stats-row">
+            <div class="stat-item">
+                <span class="stat-label">현재 수익</span>
+                <span class="stat-value profit" id="current-profit">--</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+                <span class="stat-label">런 시간</span>
+                <span class="stat-value" id="run-time">--:--</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+                <span class="stat-label">총 시간</span>
+                <span class="stat-value" id="total-time">00:00</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+                <span class="stat-label">FE/시간</span>
+                <span class="stat-value accent" id="fe-per-hour">0</span>
+            </div>
+        </div>
+        <button class="settings-btn" id="settings-btn" title="설정">⚙</button>
+    </div>
+
+    <div class="settings-panel hidden" id="settings-panel">
+        <div class="setting-row">
+            <span class="setting-label">불투명도</span>
+            <input type="range" id="opacity-slider" min="20" max="100" value="90" class="opacity-slider">
+            <span class="opacity-value" id="opacity-value">90%</span>
+        </div>
+        <div class="setting-row">
+            <button class="close-overlay-btn" id="close-btn">오버레이 닫기</button>
+        </div>
+    </div>
+
+    <script src="/static/overlay.js"></script>
+</body>
+</html>
