@@ -915,6 +915,19 @@ function initAlwaysOnTop() {
     }
 }
 
+function initModalScrollbars() {
+    document.querySelectorAll('.modal-content').forEach(el => {
+        let scrollTimeout;
+        el.addEventListener('scroll', () => {
+            el.classList.add('scrolling');
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                el.classList.remove('scrolling');
+            }, 1000);
+        });
+    });
+}
+
 function renderActiveRun(data, forceRender = false) {
     const panel = document.getElementById('active-run-panel');
     const zoneEl = document.getElementById('active-run-zone');
@@ -2735,7 +2748,7 @@ function stopAutoRefresh() {
 
 function updateRefreshInterval(seconds) {
     // Clamp to valid range
-    seconds = Math.max(0.5, Math.min(5, parseFloat(seconds) || 1));
+    seconds = Math.max(1, Math.min(5, parseFloat(seconds) || 1));
     REFRESH_INTERVAL = seconds * 1000;
     
     // Update UI controls
@@ -3313,6 +3326,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize always-on-top toggle
     initAlwaysOnTop();
+
+    // Initialize modal scrollbar detection
+    initModalScrollbars();
 
     // Scroll detection for scrollbar visibility
     let scrollTimeouts = {};

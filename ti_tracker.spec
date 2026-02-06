@@ -17,6 +17,8 @@ datas = [
     ('tlidb_items_seed_en.json', '.'),
     # Korean item names and prices
     ('src/titrack/data/items_ko.json', 'titrack/data'),
+    # Item icon URL mappings
+    ('src/titrack/data/items_icons.json', 'titrack/data'),
     # Static web files
     ('src/titrack/web/static', 'titrack/web/static'),
     # README for users

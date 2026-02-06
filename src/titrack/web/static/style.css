@@ -1579,8 +1579,37 @@ footer {
     max-width: 600px;
     width: 90%;
     max-height: 80vh;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
     box-shadow: 0 8px 32px var(--shadow);
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+
+.modal-content.scrolling {
+    scrollbar-color: var(--border) transparent;
+}
+
+.modal-content::-webkit-scrollbar {
+    width: 8px;
+    background: transparent;
+}
+
+.modal-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 4px;
+}
+
+.modal-content.scrolling::-webkit-scrollbar-thumb {
+    background: var(--border);
+}
+
+.modal-content::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
 }
 
 .modal-header {
