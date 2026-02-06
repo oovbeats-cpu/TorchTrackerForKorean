@@ -2513,6 +2513,10 @@
       "img": "https://cdn.tlidb.com/UI/Textures/Common/Icon/Item/128/UI_Item_ZhuiYiSuiXU_Icon_128.webp"
     },
     {
+      "id": "5141",
+      "img": "https://cdn.tlidb.com/UI/Textures/Common/Icon/Item/128/UI_Item_ZhuiYiSuiXU_Icon_128.webp"
+    },
+    {
       "id": "5142",
       "img": "https://cdn.tlidb.com/UI/Textures/Common/Icon/Item/128/UI_Item_ZhuiYiYouSi_Lan_Icon_128.webp"
     },
@@ -5077,6 +5081,10 @@
       "img": "https://cdn.tlidb.com/UI/Textures/Common/Icon/Skill/CommonSkill/128/UI_Skill_CMStationaryUse_Icon_128.webp"
     },
     {
+      "id": "8029",
+      "img": "https://cdn.tlidb.com/UI/Textures/Common/Icon/Skill/CommonSkill/128/UI_Skill_CMStationaryUse_Icon_128.webp"
+    },
+    {
       "id": "8030",
       "img": "https://cdn.tlidb.com/UI/Textures/Common/Icon/Skill/CommonSkill/128/UI_Skill_CMEntanglement_Icon_128.webp"
     },
@@ -5618,6 +5626,14 @@
     },
     {
       "id": "100300",
+      "img": "https://cdn.tlidb.com/UI/Textures/Common/Icon/Item/128/UI_Item_chuhuoyuanzhiV3_Icon_128.webp"
+    },
+    {
+      "id": "101200",
+      "img": "https://cdn.tlidb.com/UI/Textures/Common/Icon/Item/128/UI_Item_chuhuolingshaV3_Icon_128.webp"
+    },
+    {
+      "id": "101300",
       "img": "https://cdn.tlidb.com/UI/Textures/Common/Icon/Item/128/UI_Item_chuhuoyuanzhiV3_Icon_128.webp"
     },
     {
