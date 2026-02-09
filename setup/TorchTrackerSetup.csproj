@@ -10,7 +10,7 @@
     <Product>TorchTracker Setup</Product>
     <Description>Portable extractor for TorchTracker - 토치라이트 인피니트 트래커</Description>
     <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>false</SelfContained>
+    <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <Nullable>enable</Nullable>

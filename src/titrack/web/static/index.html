@@ -10,10 +10,14 @@
         <script src="/lib/chartjs-adapter-date-fns.bundle.min.js"></script>
     </head>
     <body>
-        <!-- Custom Window Titlebar (frameless mode) -->
-        <div id="custom-titlebar" class="custom-titlebar hidden">
+        <!-- Custom Window Titlebar (always visible for tabs, window buttons only in frameless mode) -->
+        <div id="custom-titlebar" class="custom-titlebar">
+            <div class="titlebar-tabs">
+                <button class="titlebar-tab active" data-view="main-view" onclick="switchTab('main-view')">기본 정보</button>
+                <button class="titlebar-tab" data-view="session-view" onclick="switchTab('session-view')">세션 분석</button>
+            </div>
             <div class="titlebar-drag-region pywebview-drag-region"></div>
-            <div class="titlebar-buttons">
+            <div class="titlebar-buttons titlebar-window-buttons">
                 <button class="titlebar-btn overlay-btn active" id="overlay-toggle-btn" title="오버레이" style="display: none;">
                     오버레이
                 </button>
@@ -38,6 +42,7 @@
             <div class="resize-handle resize-handle-se" data-edge="se"></div>
         </div>
 
+        <div id="main-view" class="tab-view active">
         <div id="app-scroll-container">
         <div class="container">
             <!-- Top Control Bar -->
@@ -67,7 +72,7 @@
 
                 <button class="control-btn" onclick="openSettingsModal()" title="설정">&#9881;</button>
                 <button class="control-btn" onclick="openHelpModal()">사용 방법</button>
-                <button class="control-btn" onclick="resetStats()">통계 초기화</button>
+                <button class="control-btn" onclick="resetStats()">세션 저장</button>
             </div>
 
             <header>
@@ -581,6 +586,20 @@
                         </label>
                     </section>
 
+                    <!-- High Run Threshold Section -->
+                    <section class="settings-section">
+                        <h4>하이런 설정</h4>
+                        <div class="settings-row">
+                            <label for="settings-high-run-threshold">하이런 최소 결정 수량</label>
+                            <div class="threshold-input-wrapper">
+                                <input type="number" id="settings-high-run-threshold"
+                                       min="1" step="1" value="100"
+                                       class="threshold-input" />
+                                <span class="threshold-unit">결정</span>
+                            </div>
+                        </div>
+                    </section>
+
                     <!-- Auto-Pause Options Section -->
                     <section class="settings-section">
                         <h4>자동 일시정지</h4>
@@ -1021,22 +1040,179 @@
         <div id="reset-modal" class="modal hidden">
             <div class="modal-content modal-narrow">
                 <div class="modal-header">
-                    <h3>통계 초기화</h3>
+                    <h3>세션 저장 & 초기화</h3>
                     <button class="close-btn" onclick="closeResetModal()">
                         &times;
                     </button>
                 </div>
                 <div class="modal-body reset-modal-body">
-                    <p class="reset-title">모두 초기화</p>
-                    <p class="reset-desc-text">모든 런 기록, 루팅 데이터, 플레이 시간이 삭제됩니다.<br>인벤토리, 가격, 설정은 보존됩니다.</p>
-                    
+                    <p class="reset-title">세션 저장 & 초기화</p>
+                    <p class="reset-desc-text">현재 세션의 모든 런 기록과 시간 데이터를 저장합니다. 저장 후 통계가 초기화되어 새 세션이 시작됩니다. 세션 분석 탭에서 저장된 세션을 확인할 수 있습니다.</p>
+                    <input type="text" id="session-name-input" placeholder="세션 이름 (비워두면 자동 생성)" class="session-name-input" />
+
                     <div class="reset-actions">
-                        <button class="reset-cancel-btn" onclick="closeResetModal()">아니오</button>
-                        <button class="reset-confirm-btn" onclick="executeReset('all')">예</button>
+                        <button class="reset-cancel-btn" onclick="closeResetModal()">취소</button>
+                        <button class="reset-confirm-btn" onclick="executeReset('save_session')">저장 & 초기화</button>
                     </div>
                 </div>
             </div>
         </div>
+        </div>
+        </div><!-- /main-view -->
+
+        <div id="session-view" class="tab-view hidden">
+            <div class="session-scroll-container">
+                <div class="session-container">
+                    <!-- 상단: 세션 대시보드 -->
+                    <section id="session-dashboard" class="session-dashboard panel">
+                        <div class="session-dashboard-header">
+                            <h2 id="session-dashboard-title">세션 통계</h2>
+                            <div id="session-tags" class="session-tags">
+                                <span class="session-tags-hint">아래 목록에서 세션을 선택하세요</span>
+                            </div>
+                        </div>
+
+                        <!-- 선택된 세션의 통계 (초기 hidden) -->
+                        <div id="session-stats-grid" class="session-stats-grid hidden">
+                            <!-- 수익 대시보드 (기본 정보 탭과 동일 구조) -->
+                            <div class="performance-section">
+                                <div class="performance-dashboards">
+                                    <div class="perf-row total">
+                                        <div class="perf-card">
+                                            <span class="perf-label">분당 평균 수익</span>
+                                            <span id="sess-total-min-avg" class="perf-value">0</span>
+                                        </div>
+                                        <div class="perf-card">
+                                            <span class="perf-label">시간당 평균 수익</span>
+                                            <span id="sess-total-hour-avg" class="perf-value">0</span>
+                                        </div>
+                                    </div>
+                                    <div class="perf-row mapping">
+                                        <div class="perf-card">
+                                            <span class="perf-label">분당 평균 수익</span>
+                                            <span id="sess-mapping-min-avg" class="perf-value">0</span>
+                                        </div>
+                                        <div class="perf-card">
+                                            <span class="perf-label">시간당 평균 수익</span>
+                                            <span id="sess-mapping-hour-avg" class="perf-value">0</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="stats-grid session-stats-extended">
+                                    <div class="grid-card">
+                                        <span class="grid-label">런 횟수</span>
+                                        <span id="sess-run-count" class="grid-value">0회</span>
+                                    </div>
+                                    <div class="grid-card">
+                                        <span class="grid-label">평균 런 시간</span>
+                                        <span id="sess-avg-run-time" class="grid-value">0분 0초</span>
+                                    </div>
+                                    <div class="grid-card">
+                                        <span class="grid-label">총 입장비용</span>
+                                        <span id="sess-total-cost" class="grid-value">0결정</span>
+                                    </div>
+                                    <div class="grid-card">
+                                        <span class="grid-label">총 순수익</span>
+                                        <span id="sess-total-profit" class="grid-value">0결정</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- 확장 통계 그리드 1 -->
+                            <div class="stats-grid session-stats-extended">
+                                <div class="grid-card">
+                                    <span class="grid-label">시간당 런 횟수</span>
+                                    <span id="sess-runs-per-hour" class="grid-value">0회</span>
+                                </div>
+                                <div class="grid-card">
+                                    <span class="grid-label" id="sess-high-run-label">하이런 횟수 (100+ 결정)</span>
+                                    <span id="sess-high-run-count" class="grid-value">0회</span>
+                                </div>
+                                <div class="grid-card">
+                                    <span class="grid-label" id="sess-high-run-ratio-label">하이런 비율 (100+ 결정)</span>
+                                    <span id="sess-high-run-ratio" class="grid-value">0%</span>
+                                </div>
+                                <div class="grid-card">
+                                    <span class="grid-label">상위 10% 평균</span>
+                                    <span id="sess-top-10-avg" class="grid-value">0 결정</span>
+                                </div>
+                            </div>
+                            <!-- 확장 통계 그리드 2 -->
+                            <div class="stats-grid session-stats-extended">
+                                <div class="grid-card">
+                                    <span class="grid-label">수익 안정성</span>
+                                    <span id="sess-stability" class="grid-value">-</span>
+                                </div>
+                                <div class="grid-card">
+                                    <span class="grid-label">수술실 입장</span>
+                                    <span id="sess-surgery-count" class="grid-value">0회</span>
+                                </div>
+                                <div class="grid-card">
+                                    <span class="grid-label">수술실 수익</span>
+                                    <span id="sess-surgery-profit" class="grid-value">0 결정</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- 하단: 세션 목록 -->
+                    <section class="session-list-panel panel">
+                        <div class="section-header">
+                            <h2>저장된 세션</h2>
+                            <div class="session-list-controls">
+                                <span id="session-count" class="session-count">0개</span>
+                                <button id="session-compare-btn" class="compare-btn" disabled onclick="openCompareModal()">세션 비교</button>
+                            </div>
+                        </div>
+                        <div class="session-list-container">
+                            <div id="session-list" class="session-list">
+                                <p class="no-sessions">저장된 세션이 없습니다</p>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div><!-- /session-view -->
+
+        <!-- 세션 비교 모달 -->
+        <div id="compare-modal" class="modal hidden">
+            <div class="modal-content modal-compare">
+                <div class="modal-header">
+                    <h3>세션 비교 분석</h3>
+                    <button class="close-btn" onclick="closeCompareModal()">&times;</button>
+                </div>
+
+                <div class="compare-body">
+                    <!-- 레이더 차트 -->
+                    <div class="compare-chart-section">
+                        <canvas id="radar-chart"></canvas>
+                        <div id="compare-legend" class="compare-legend"></div>
+                    </div>
+
+                    <!-- 상세 비교 테이블 -->
+                    <div class="compare-table-section">
+                        <h4>상세 비교</h4>
+                        <table class="compare-table">
+                            <thead>
+                                <tr>
+                                    <th>메트릭</th>
+                                    <th id="compare-col-1">세션 1</th>
+                                    <th id="compare-col-2">세션 2</th>
+                                    <th id="compare-col-3" class="hidden">세션 3</th>
+                                </tr>
+                            </thead>
+                            <tbody id="compare-table-body">
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 파밍 분석 코멘트 -->
+                    <div class="compare-analysis-section">
+                        <h4>파밍 분석</h4>
+                        <div id="compare-analysis" class="compare-analysis"></div>
+                        <div id="compare-recommendation" class="compare-recommendation"></div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <script src="app.js"></script>

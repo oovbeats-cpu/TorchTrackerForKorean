@@ -155,6 +155,17 @@ class Database:
             cursor.execute("ALTER TABLE slot_state_new RENAME TO slot_state")
             print("Migration: Recreated slot_state table with player_id")
 
+        # V4 migrations: session management support
+        # Re-read runs columns (may have been modified by earlier migrations)
+        cursor.execute("PRAGMA table_info(runs)")
+        runs_columns_v4 = [row[1] for row in cursor.fetchall()]
+
+        if "session_id" not in runs_columns_v4:
+            cursor.execute(
+                "ALTER TABLE runs ADD COLUMN session_id INTEGER REFERENCES sessions(id)"
+            )
+            print("Migration: Added session_id column to runs table")
+
     def _auto_seed_items(self, cursor: sqlite3.Cursor) -> None:
         """
         Auto-seed items table on first run if empty.

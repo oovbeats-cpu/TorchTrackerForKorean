@@ -27,6 +27,7 @@ ALLOWED_SETTINGS = {
     "cloud_midnight_refresh",
     "cloud_exchange_override",
     "cloud_startup_refresh",
+    "high_run_threshold",
 }
 
 # Settings that are read-only via API (can be read but not written)
@@ -100,6 +101,11 @@ def update_setting(
         update_preference("cloud_startup_refresh", request.value == "true")
     elif key == "log_directory":
         update_preference("log_directory", request.value)
+    elif key == "high_run_threshold":
+        try:
+            update_preference("high_run_threshold", float(request.value))
+        except (ValueError, TypeError):
+            update_preference("high_run_threshold", 100.0)
     
     return SettingResponse(key=key, value=request.value)
 

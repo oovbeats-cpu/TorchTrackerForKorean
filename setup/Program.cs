@@ -398,67 +398,99 @@ public class SetupForm : Form
 
     private void ExtractEmbeddedZip()
     {
-        this.Invoke((Action)(() => {
-            _statusLabel.Text = "Extracting...";
-            _progressBar.Value = 0;
-        }));
-
-        Directory.CreateDirectory(_extractPath);
-
-        using var zipStream = GetEmbeddedZipStream();
-        if (zipStream == null)
+        var tempZip = Path.Combine(Path.GetTempPath(), $"TorchTracker_{Guid.NewGuid():N}.zip");
+        try
         {
-            throw new Exception("Could not read embedded ZIP resource");
-        }
-
-        using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
-        var totalEntries = archive.Entries.Count;
-        var extractedEntries = 0;
-
-        foreach (var entry in archive.Entries)
-        {
-            if (string.IsNullOrEmpty(entry.Name))
+            // 1단계: 임베디드 리소스 → 임시 파일 (진행률 표시)
+            using (var resStream = GetEmbeddedZipStream())
             {
-                extractedEntries++;
-                continue;
+                if (resStream == null)
+                    throw new Exception("Could not read embedded ZIP resource");
+
+                long totalBytes = resStream.CanSeek ? resStream.Length : 0;
+                long copiedBytes = 0;
+                var buffer = new byte[512 * 1024]; // 512KB buffer
+
+                using var fs = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None, buffer.Length);
+                int bytesRead;
+                var lastPct = -1;
+                while ((bytesRead = resStream.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    fs.Write(buffer, 0, bytesRead);
+                    copiedBytes += bytesRead;
+
+                    if (totalBytes > 0)
+                    {
+                        var pct = (int)(copiedBytes * 30 / totalBytes); // 0~30%
+                        if (pct > lastPct)
+                        {
+                            lastPct = pct;
+                            var mb = copiedBytes / (1024 * 1024);
+                            var totalMb = totalBytes / (1024 * 1024);
+                            this.Invoke((Action)(() => {
+                                _progressBar.Value = pct;
+                                _statusLabel.Text = $"Reading data... {mb}/{totalMb} MB";
+                            }));
+                        }
+                    }
+                }
             }
 
-            var relativePath = entry.FullName;
-            if (relativePath.StartsWith("TorchTracker/", StringComparison.OrdinalIgnoreCase))
+            // 2단계: 임시 파일에서 개별 추출 (실시간 진행률)
+            Directory.CreateDirectory(_extractPath);
+
+            using var archive = ZipFile.OpenRead(tempZip);
+            var totalEntries = archive.Entries.Count;
+            var extracted = 0;
+            var lastProgress = 30; // 30%부터 시작
+
+            foreach (var entry in archive.Entries)
             {
-                relativePath = relativePath.Substring(13);
+                if (string.IsNullOrEmpty(entry.Name))
+                {
+                    extracted++;
+                    continue;
+                }
+
+                var relativePath = entry.FullName;
+                if (relativePath.StartsWith("TorchTracker/", StringComparison.OrdinalIgnoreCase) ||
+                    relativePath.StartsWith("TorchTracker\\", StringComparison.OrdinalIgnoreCase))
+                {
+                    relativePath = relativePath.Substring(13);
+                }
+
+                var destPath = Path.Combine(_extractPath, relativePath);
+                var destDir = Path.GetDirectoryName(destPath);
+                if (!string.IsNullOrEmpty(destDir))
+                    Directory.CreateDirectory(destDir);
+
+                entry.ExtractToFile(destPath, overwrite: true);
+                extracted++;
+
+                // 30~100% 구간, 3% 간격으로 업데이트
+                var progress = 30 + (extracted * 70 / totalEntries);
+                if (progress >= lastProgress + 3 || extracted == totalEntries)
+                {
+                    lastProgress = progress;
+                    var cur = extracted;
+                    this.Invoke((Action)(() => {
+                        _progressBar.Value = progress;
+                        _statusLabel.Text = $"Extracting... {cur}/{totalEntries} files ({progress}%)";
+                    }));
+                }
             }
-            else if (relativePath.StartsWith("TorchTracker\\", StringComparison.OrdinalIgnoreCase))
-            {
-                relativePath = relativePath.Substring(13);
-            }
 
-            var destPath = Path.Combine(_extractPath, relativePath);
-            var destDir = Path.GetDirectoryName(destPath);
-
-            if (!string.IsNullOrEmpty(destDir))
-            {
-                Directory.CreateDirectory(destDir);
-            }
-
-            entry.ExtractToFile(destPath, overwrite: true);
-
-            extractedEntries++;
-            var progress = (extractedEntries * 100) / totalEntries;
-            var currentEntry = extractedEntries;
-            
             this.Invoke((Action)(() => {
-                _progressBar.Value = progress;
-                _statusLabel.Text = $"Extracting... {currentEntry}/{totalEntries} files";
+                _progressBar.Value = 100;
+                _statusLabel.Text = "Extraction complete!";
             }));
-        }
 
-        this.Invoke((Action)(() => {
-            _progressBar.Value = 100;
-            _statusLabel.Text = "Extraction complete!";
-        }));
-        
-        _extractionComplete = true;
+            _extractionComplete = true;
+        }
+        finally
+        {
+            try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+        }
     }
 
     private void CreateDesktopShortcut()

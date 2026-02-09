@@ -1,5 +1,6 @@
 """Repository - CRUD operations for all entities."""
 
+import statistics
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -126,16 +127,18 @@ class Repository:
         if season_id is not None:
             # Filter: show data where season/player matches OR is NULL (legacy/untagged)
             # This excludes data explicitly tagged for a DIFFERENT season/player
+            # Only show runs not yet assigned to a session (current session view)
             rows = self.db.fetchall(
                 """SELECT * FROM runs
-                   WHERE (season_id IS NULL OR season_id = ?)
+                   WHERE session_id IS NULL
+                   AND (season_id IS NULL OR season_id = ?)
                    AND (player_id IS NULL OR player_id = ?)
                    ORDER BY start_ts DESC LIMIT ?""",
                 (season_id, player_id or '', limit),
             )
         else:
             rows = self.db.fetchall(
-                "SELECT * FROM runs ORDER BY start_ts DESC LIMIT ?", (limit,)
+                "SELECT * FROM runs WHERE session_id IS NULL ORDER BY start_ts DESC LIMIT ?", (limit,)
             )
         return [self._row_to_run(row) for row in rows]
 
@@ -156,16 +159,18 @@ class Repository:
 
         if season_id is not None:
             # Filter: show data where season/player matches OR is NULL (legacy/untagged)
+            # Only show zones from runs not yet assigned to a session
             rows = self.db.fetchall(
                 """SELECT DISTINCT zone_signature FROM runs
-                   WHERE (season_id IS NULL OR season_id = ?)
+                   WHERE session_id IS NULL
+                   AND (season_id IS NULL OR season_id = ?)
                    AND (player_id IS NULL OR player_id = ?)
                    ORDER BY zone_signature""",
                 (season_id, player_id or ''),
             )
         else:
             rows = self.db.fetchall(
-                "SELECT DISTINCT zone_signature FROM runs ORDER BY zone_signature"
+                "SELECT DISTINCT zone_signature FROM runs WHERE session_id IS NULL ORDER BY zone_signature"
             )
         return [row["zone_signature"] for row in rows]
 
@@ -925,7 +930,10 @@ class Repository:
             raise
 
         # Force WAL checkpoint to ensure changes are written to main database
-        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        try:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass  # Non-critical: checkpoint will happen naturally
 
         return run_count
 
@@ -954,8 +962,11 @@ class Repository:
         except Exception:
             conn.execute("ROLLBACK")
             raise
-        # Force checkpoint
-        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        # Force checkpoint (non-critical if it fails due to concurrent access)
+        try:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass
 
     def get_log_position(self) -> Optional[tuple[Path, int, int]]:
         """
@@ -994,11 +1005,11 @@ class Repository:
             return []
 
         # Build query with appropriate filters
-        # Only include items picked up during map runs (run_id IS NOT NULL)
+        # Only include items picked up during map runs not yet assigned to a session
         base_query = """
             SELECT config_base_id, SUM(delta) as total_quantity
             FROM item_deltas
-            WHERE run_id IS NOT NULL
+            WHERE run_id IN (SELECT id FROM runs WHERE session_id IS NULL)
             AND (proto_name IS NULL OR proto_name != 'Spv3Open')
         """
 
@@ -1050,14 +1061,15 @@ class Repository:
         if season_id is not None:
             row = self.db.fetchone(
                 """SELECT COUNT(*) as cnt FROM runs
-                   WHERE end_ts IS NOT NULL AND is_hub = 0
+                   WHERE session_id IS NULL
+                   AND end_ts IS NOT NULL AND is_hub = 0
                    AND (season_id IS NULL OR season_id = ?)
                    AND (player_id IS NULL OR player_id = ?)""",
                 (season_id, player_id or ''),
             )
         else:
             row = self.db.fetchone(
-                "SELECT COUNT(*) as cnt FROM runs WHERE end_ts IS NOT NULL AND is_hub = 0"
+                "SELECT COUNT(*) as cnt FROM runs WHERE session_id IS NULL AND end_ts IS NOT NULL AND is_hub = 0"
             )
         return row["cnt"] if row else 0
 
@@ -1088,7 +1100,8 @@ class Repository:
                        (julianday(end_ts) - julianday(start_ts)) * 86400
                    ) as total_seconds
                    FROM runs
-                   WHERE end_ts IS NOT NULL AND is_hub = 0
+                   WHERE session_id IS NULL
+                   AND end_ts IS NOT NULL AND is_hub = 0
                    AND (season_id IS NULL OR season_id = ?)
                    AND (player_id IS NULL OR player_id = ?)""",
                 (season_id, player_id or ''),
@@ -1099,7 +1112,8 @@ class Repository:
                        (julianday(end_ts) - julianday(start_ts)) * 86400
                    ) as total_seconds
                    FROM runs
-                   WHERE end_ts IS NOT NULL AND is_hub = 0"""
+                   WHERE session_id IS NULL
+                   AND end_ts IS NOT NULL AND is_hub = 0"""
             )
         return row["total_seconds"] if row and row["total_seconds"] else 0.0
 
@@ -1124,12 +1138,13 @@ class Repository:
         if self._current_player_id is None and player_id is None:
             return 0.0
 
-        # Get all map cost deltas (Spv3Open events with run_id)
+        # Get all map cost deltas (Spv3Open events) for runs not yet in a session
         if season_id is not None:
             rows = self.db.fetchall(
                 """SELECT config_base_id, SUM(delta) as total_delta
                    FROM item_deltas
-                   WHERE run_id IS NOT NULL AND proto_name = 'Spv3Open'
+                   WHERE run_id IN (SELECT id FROM runs WHERE session_id IS NULL)
+                   AND proto_name = 'Spv3Open'
                    AND (season_id IS NULL OR season_id = ?)
                    AND (player_id IS NULL OR player_id = ?)
                    GROUP BY config_base_id""",
@@ -1139,7 +1154,8 @@ class Repository:
             rows = self.db.fetchall(
                 """SELECT config_base_id, SUM(delta) as total_delta
                    FROM item_deltas
-                   WHERE run_id IS NOT NULL AND proto_name = 'Spv3Open'
+                   WHERE run_id IN (SELECT id FROM runs WHERE session_id IS NULL)
+                   AND proto_name = 'Spv3Open'
                    GROUP BY config_base_id"""
             )
 
@@ -1155,3 +1171,666 @@ class Repository:
                 total_cost += abs(quantity) * price_fe
 
         return total_cost
+
+    # --- Sessions ---
+
+    def create_session(
+        self,
+        name: str,
+        total_play_seconds: float = 0.0,
+        mapping_play_seconds: float = 0.0,
+    ) -> dict:
+        """
+        Create a new farming session and associate unassigned runs.
+
+        - Inserts a new row into sessions with current player context.
+        - Links all runs that have session_id IS NULL (and match player context).
+        - Calculates run_count and total_net_profit_fe from associated runs.
+        - Does NOT delete runs/item_deltas (data preservation).
+
+        Returns:
+            Dict with the created session info.
+        """
+        player_id = self._current_player_id
+        season_id = self._current_season_id
+        created_at = datetime.now().isoformat()
+
+        conn = self.db.connection
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            # Insert session row
+            cursor = conn.execute(
+                """INSERT INTO sessions
+                   (name, created_at, total_play_seconds, mapping_play_seconds,
+                    run_count, total_net_profit_fe, player_id, season_id, status)
+                   VALUES (?, ?, ?, ?, 0, 0, ?, ?, 'closed')""",
+                (name, created_at, total_play_seconds, mapping_play_seconds,
+                 player_id, season_id),
+            )
+            session_id = cursor.lastrowid
+
+            # Link unassigned runs (session_id IS NULL) matching player context
+            if season_id is not None:
+                conn.execute(
+                    """UPDATE runs SET session_id = ?
+                       WHERE session_id IS NULL AND is_hub = 0
+                       AND end_ts IS NOT NULL
+                       AND (season_id IS NULL OR season_id = ?)
+                       AND (player_id IS NULL OR player_id = ?)""",
+                    (session_id, season_id, player_id or ''),
+                )
+            else:
+                conn.execute(
+                    """UPDATE runs SET session_id = ?
+                       WHERE session_id IS NULL AND is_hub = 0
+                       AND end_ts IS NOT NULL""",
+                    (session_id,),
+                )
+
+            # Calculate run_count and total_net_profit_fe
+            rows = conn.execute(
+                "SELECT id FROM runs WHERE session_id = ? AND is_hub = 0",
+                (session_id,),
+            ).fetchall()
+
+            run_count = len(rows)
+            total_net_profit = 0.0
+
+            for row in rows:
+                rid = row[0]
+                _, run_value = self.get_run_value(rid)
+                _, run_cost, _ = self.get_run_cost(rid)
+                total_net_profit += run_value - run_cost
+
+            # Update session with calculated values
+            conn.execute(
+                """UPDATE sessions
+                   SET run_count = ?, total_net_profit_fe = ?
+                   WHERE id = ?""",
+                (run_count, total_net_profit, session_id),
+            )
+
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
+        return {
+            "id": session_id,
+            "name": name,
+            "created_at": created_at,
+            "total_play_seconds": total_play_seconds,
+            "mapping_play_seconds": mapping_play_seconds,
+            "run_count": run_count,
+            "total_net_profit_fe": total_net_profit,
+            "player_id": player_id,
+            "season_id": season_id,
+            "status": "closed",
+        }
+
+    def get_sessions(self) -> list[dict]:
+        """
+        Get all sessions for the current player context, ordered newest first.
+
+        Returns:
+            List of session dicts.
+        """
+        player_id = self._current_player_id
+        season_id = self._current_season_id
+
+        if season_id is not None:
+            rows = self.db.fetchall(
+                """SELECT * FROM sessions
+                   WHERE (player_id IS NULL OR player_id = ?)
+                   AND (season_id IS NULL OR season_id = ?)
+                   ORDER BY created_at DESC""",
+                (player_id or '', season_id),
+            )
+        else:
+            rows = self.db.fetchall(
+                "SELECT * FROM sessions ORDER BY created_at DESC"
+            )
+
+        result = []
+        for row in rows:
+            keys = row.keys()
+            result.append({
+                "id": row["id"],
+                "name": row["name"],
+                "created_at": row["created_at"],
+                "total_play_seconds": row["total_play_seconds"] or 0.0,
+                "mapping_play_seconds": row["mapping_play_seconds"] or 0.0,
+                "run_count": row["run_count"] or 0,
+                "total_net_profit_fe": row["total_net_profit_fe"] or 0.0,
+                "status": row["status"] if "status" in keys else "closed",
+            })
+        return result
+
+    def get_session_stats(self, session_id: int) -> dict:
+        """
+        Calculate detailed statistics for a session.
+
+        Returns a dict with profitability, time, run metrics, deep analysis,
+        and raw radar chart axis values.
+        """
+        # Get session row
+        session_row = self.db.fetchone(
+            "SELECT * FROM sessions WHERE id = ?", (session_id,)
+        )
+        if not session_row:
+            return {}
+
+        session_name = session_row["name"]
+        created_at = session_row["created_at"]
+        total_play_seconds = session_row["total_play_seconds"] or 0.0
+        mapping_play_seconds = session_row["mapping_play_seconds"] or 0.0
+
+        # Get completed (non-hub) runs for this session
+        run_rows = self.db.fetchall(
+            """SELECT id, start_ts, end_ts, zone_signature FROM runs
+               WHERE session_id = ? AND is_hub = 0 AND end_ts IS NOT NULL
+               ORDER BY start_ts""",
+            (session_id,),
+        )
+
+        run_count = len(run_rows)
+
+        # Per-run profit calculation + season content (surgery) tracking
+        run_profits: list[float] = []
+        total_gross_value = 0.0
+        total_entry_cost = 0.0
+        surgery_run_count = 0
+        surgery_profit = 0.0
+        SURGERY_ZONE_KEY = "DiXiaZhenSuo"
+
+        for rrow in run_rows:
+            rid = rrow["id"]
+            _, run_value = self.get_run_value(rid)
+            _, run_cost, _ = self.get_run_cost(rid)
+            net_profit = run_value - run_cost
+            run_profits.append(net_profit)
+            total_gross_value += run_value
+            total_entry_cost += run_cost
+
+            zone_sig = rrow["zone_signature"] or ""
+            if SURGERY_ZONE_KEY in zone_sig:
+                surgery_run_count += 1
+                surgery_profit += net_profit
+
+        total_net_profit = total_gross_value - total_entry_cost
+
+        # Time-based metrics (safe division)
+        mapping_minutes = mapping_play_seconds / 60.0 if mapping_play_seconds > 0 else 0.0
+        mapping_hours = mapping_play_seconds / 3600.0 if mapping_play_seconds > 0 else 0.0
+        total_minutes = total_play_seconds / 60.0 if total_play_seconds > 0 else 0.0
+        total_hours = total_play_seconds / 3600.0 if total_play_seconds > 0 else 0.0
+
+        profit_per_minute_mapping = (total_net_profit / mapping_minutes) if mapping_minutes > 0 else 0.0
+        profit_per_hour_mapping = (total_net_profit / mapping_hours) if mapping_hours > 0 else 0.0
+        profit_per_minute_total = (total_net_profit / total_minutes) if total_minutes > 0 else 0.0
+        profit_per_hour_total = (total_net_profit / total_hours) if total_hours > 0 else 0.0
+
+        # Run metrics
+        runs_per_hour = (run_count / mapping_hours) if mapping_hours > 0 else 0.0
+
+        # Average run duration from actual run timestamps
+        run_durations: list[float] = []
+        for rrow in run_rows:
+            if rrow["start_ts"] and rrow["end_ts"]:
+                start = datetime.fromisoformat(rrow["start_ts"])
+                end = datetime.fromisoformat(rrow["end_ts"])
+                run_durations.append((end - start).total_seconds())
+
+        avg_run_seconds = (
+            sum(run_durations) / len(run_durations) if run_durations else 0.0
+        )
+
+        avg_run_profit = (total_net_profit / run_count) if run_count > 0 else 0.0
+
+        # Deep analysis metrics
+        high_run_threshold_str = self.get_setting("high_run_threshold")
+        high_run_threshold = float(high_run_threshold_str) if high_run_threshold_str else 100.0
+        high_run_count = sum(1 for p in run_profits if p >= high_run_threshold)
+        high_run_ratio = (high_run_count / run_count) if run_count > 0 else 0.0
+
+        # Standard deviation (requires >= 2 values)
+        if len(run_profits) >= 2:
+            profit_stddev = statistics.stdev(run_profits)
+        else:
+            profit_stddev = 0.0
+
+        # Coefficient of variation
+        mean_profit = avg_run_profit
+        profit_cv = (profit_stddev / abs(mean_profit)) if mean_profit != 0 else 0.0
+
+        # Max profit
+        max_run_profit = max(run_profits) if run_profits else 0.0
+
+        # Median
+        median_run_profit = statistics.median(run_profits) if run_profits else 0.0
+
+        # Bottom 25% average
+        if run_profits:
+            sorted_profits = sorted(run_profits)
+            bottom_count = max(1, len(sorted_profits) // 4)
+            bottom_25 = sorted_profits[:bottom_count]
+            bottom_25_avg = sum(bottom_25) / len(bottom_25)
+        else:
+            bottom_25_avg = 0.0
+
+        # 상위 10% 평균 수익 (Top 10% mean)
+        if run_profits:
+            top_10_count = max(1, run_count // 10)
+            sorted_desc = sorted(run_profits, reverse=True)
+            top_10_avg = sum(sorted_desc[:top_10_count]) / top_10_count
+        else:
+            top_10_avg = 0.0
+
+        # Radar chart raw values
+        efficiency_ratio = (
+            (mapping_play_seconds / total_play_seconds)
+            if total_play_seconds > 0
+            else 0.0
+        )
+
+        # Season content ratio (based on gross value to avoid >100% when net is low)
+        surgery_income_ratio = (
+            (surgery_profit / total_gross_value)
+            if total_gross_value > 0
+            else 0.0
+        )
+
+        # Cost ratio
+        cost_ratio = (
+            (total_entry_cost / total_gross_value)
+            if total_gross_value > 0
+            else 0.0
+        )
+
+        # Min run profit
+        min_run_profit = min(run_profits) if run_profits else 0.0
+
+        # Generate farming style tags
+        tags = self._generate_tags(
+            run_count=run_count,
+            run_profits=run_profits,
+            profit_cv=profit_cv,
+            high_run_ratio=high_run_ratio,
+            total_play_seconds=total_play_seconds,
+            mapping_play_seconds=mapping_play_seconds,
+            avg_run_seconds=avg_run_seconds,
+            runs_per_hour=runs_per_hour,
+            total_net_profit=total_net_profit,
+            total_gross_value=total_gross_value,
+            total_entry_cost=total_entry_cost,
+            surgery_run_count=surgery_run_count,
+            surgery_profit=surgery_profit,
+            surgery_income_ratio=surgery_income_ratio,
+            cost_ratio=cost_ratio,
+            efficiency_ratio=efficiency_ratio,
+            max_run_profit=max_run_profit,
+            min_run_profit=min_run_profit,
+        )
+
+        return {
+            "session_id": session_id,
+            "name": session_name,
+            "created_at": created_at,
+            "run_count": run_count,
+            "total_play_seconds": total_play_seconds,
+            "mapping_play_seconds": mapping_play_seconds,
+            # Profitability
+            "total_gross_value_fe": total_gross_value,
+            "total_entry_cost_fe": total_entry_cost,
+            "total_net_profit_fe": total_net_profit,
+            # Time-based
+            "profit_per_minute_mapping": profit_per_minute_mapping,
+            "profit_per_hour_mapping": profit_per_hour_mapping,
+            "profit_per_minute_total": profit_per_minute_total,
+            "profit_per_hour_total": profit_per_hour_total,
+            # Run metrics
+            "runs_per_hour": runs_per_hour,
+            "avg_run_seconds": avg_run_seconds,
+            "avg_run_profit_fe": avg_run_profit,
+            # Deep analysis
+            "high_run_count": high_run_count,
+            "high_run_ratio": high_run_ratio,
+            "profit_stddev": profit_stddev,
+            "profit_cv": profit_cv,
+            "max_run_profit_fe": max_run_profit,
+            "median_run_profit_fe": median_run_profit,
+            "bottom_25_avg_fe": bottom_25_avg,
+            "top_10_avg_profit_fe": top_10_avg,
+            "high_run_threshold": high_run_threshold,
+            # Season content (surgery)
+            "surgery_run_count": surgery_run_count,
+            "surgery_profit_fe": surgery_profit,
+            "surgery_income_ratio": surgery_income_ratio,
+            # Cost analysis
+            "cost_ratio": cost_ratio,
+            # Farming style tags
+            "tags": tags,
+            # Radar chart axes (raw values, normalized during comparison)
+            "radar_profitability": profit_per_hour_mapping,
+            "radar_stability": 1 - profit_cv,  # raw; higher = more stable
+            "radar_efficiency": efficiency_ratio,
+            "radar_burst": high_run_ratio,
+            "radar_speed": runs_per_hour,
+            "radar_scale": total_net_profit,
+        }
+
+    def update_session_name(self, session_id: int, name: str) -> bool:
+        """
+        Update a session's name.
+
+        Returns True if the row was updated, False otherwise.
+        """
+        cursor = self.db.execute(
+            "UPDATE sessions SET name = ? WHERE id = ?",
+            (name, session_id),
+        )
+        return cursor.rowcount > 0
+
+    def delete_session(self, session_id: int) -> bool:
+        """
+        Delete a session and all its associated data.
+
+        Deletes item_deltas for runs in the session, then runs, then the session.
+        Uses a transaction for atomicity.
+
+        Returns True if the session was deleted.
+        """
+        conn = self.db.connection
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            # Delete item_deltas for runs belonging to this session
+            conn.execute(
+                """DELETE FROM item_deltas
+                   WHERE run_id IN (SELECT id FROM runs WHERE session_id = ?)""",
+                (session_id,),
+            )
+            # Delete runs belonging to this session
+            conn.execute(
+                "DELETE FROM runs WHERE session_id = ?",
+                (session_id,),
+            )
+            # Delete the session itself
+            cursor = conn.execute(
+                "DELETE FROM sessions WHERE id = ?",
+                (session_id,),
+            )
+            deleted = cursor.rowcount > 0
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
+        # Force WAL checkpoint (non-critical if it fails due to concurrent access)
+        try:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass
+        return deleted
+
+    def compare_sessions(self, session_ids: list[int]) -> dict:
+        """
+        Compare up to 3 sessions with normalized radar chart data and analysis.
+
+        Args:
+            session_ids: List of session IDs to compare (max 3).
+
+        Returns:
+            Dict with sessions stats, normalized radar, analysis, and recommendation.
+        """
+        session_ids = session_ids[:3]  # cap at 3
+
+        sessions_stats: list[dict] = []
+        for sid in session_ids:
+            stats = self.get_session_stats(sid)
+            if stats:
+                sessions_stats.append(stats)
+
+        if not sessions_stats:
+            return {
+                "sessions": [],
+                "radar_normalized": [],
+                "analysis": [],
+                "recommendation": "",
+            }
+
+        # --- Radar normalization ---
+        radar_axes = [
+            "radar_profitability",
+            "radar_efficiency",
+            "radar_burst",
+            "radar_speed",
+            "radar_scale",
+        ]
+
+        radar_normalized: list[dict] = [{} for _ in sessions_stats]
+
+        # Standard axes: higher = better, max = 100
+        for axis in radar_axes:
+            max_val = max(s.get(axis, 0) for s in sessions_stats)
+            for i, s in enumerate(sessions_stats):
+                if max_val > 0:
+                    radar_normalized[i][axis.replace("radar_", "")] = (
+                        s.get(axis, 0) / max_val
+                    ) * 100
+                else:
+                    radar_normalized[i][axis.replace("radar_", "")] = 0
+
+        # Stability: CV lower = better (inverse normalization)
+        cvs = [s.get("profit_cv", 0) for s in sessions_stats]
+        min_cv = min(cvs)
+        max_cv = max(cvs)
+        for i, s in enumerate(sessions_stats):
+            cv = s.get("profit_cv", 0)
+            if max_cv > min_cv:
+                radar_normalized[i]["stability"] = 100 - (
+                    (cv - min_cv) / (max_cv - min_cv)
+                ) * 100
+            else:
+                # All sessions have same CV → all get 100
+                radar_normalized[i]["stability"] = 100
+
+        # --- Analysis comments ---
+        analysis: list[dict] = []
+        for s in sessions_stats:
+            atype, summary = self._generate_analysis(s)
+            analysis.append({
+                "session_id": s["session_id"],
+                "name": s["name"],
+                "type": atype,
+                "summary": summary,
+            })
+
+        # --- Recommendation ---
+        recommendation = self._generate_recommendation(sessions_stats)
+
+        return {
+            "sessions": sessions_stats,
+            "radar_normalized": radar_normalized,
+            "analysis": analysis,
+            "recommendation": recommendation,
+        }
+
+    @staticmethod
+    def _generate_tags(**kwargs) -> list[dict]:
+        """
+        Generate farming style tags for a session based on various metrics.
+
+        Returns a list of dicts: [{"id": "tag_id", "label": "태그명", "desc": "설명"}]
+        """
+        tags: list[dict] = []
+        run_count = kwargs.get("run_count", 0)
+        if run_count < 2:
+            return tags
+
+        run_profits = kwargs.get("run_profits", [])
+        profit_cv = kwargs.get("profit_cv", 0)
+        total_play_seconds = kwargs.get("total_play_seconds", 0)
+        mapping_play_seconds = kwargs.get("mapping_play_seconds", 0)
+        avg_run_seconds = kwargs.get("avg_run_seconds", 0)
+        runs_per_hour = kwargs.get("runs_per_hour", 0)
+        total_net_profit = kwargs.get("total_net_profit", 0)
+        total_gross_value = kwargs.get("total_gross_value", 0)
+        total_entry_cost = kwargs.get("total_entry_cost", 0)
+        surgery_run_count = kwargs.get("surgery_run_count", 0)
+        surgery_income_ratio = kwargs.get("surgery_income_ratio", 0)
+        cost_ratio = kwargs.get("cost_ratio", 0)
+        efficiency_ratio = kwargs.get("efficiency_ratio", 0)
+        max_run_profit = kwargs.get("max_run_profit", 0)
+        min_run_profit = kwargs.get("min_run_profit", 0)
+
+        # 도파민중독자: 하이런과 로우런의 격차가 매우 큰 경우
+        # IQR (사분위범위) 대비 범위가 크고 CV가 높은 경우
+        if run_profits and profit_cv > 0.7:
+            sorted_p = sorted(run_profits)
+            q1_idx = len(sorted_p) // 4
+            q3_idx = (3 * len(sorted_p)) // 4
+            iqr = sorted_p[q3_idx] - sorted_p[q1_idx] if q3_idx > q1_idx else 0
+            full_range = max_run_profit - min_run_profit
+            if full_range > 0 and iqr > 0 and (full_range / iqr) > 3.0:
+                tags.append({
+                    "id": "dopamine_addict",
+                    "label": "도파민중독자",
+                    "desc": f"수익 변동 극심 (CV: {profit_cv:.1f}, 최대-최소: {full_range:.0f})",
+                })
+
+        # 안정성우선: 판당 소득차이가 작음
+        if profit_cv < 0.35 and run_count >= 5:
+            tags.append({
+                "id": "stability_first",
+                "label": "안정성우선",
+                "desc": f"꾸준한 수익 (CV: {profit_cv:.2f})",
+            })
+
+        # 시즌컨텐츠중독자: 주요 소득이 시즌 컨텐츠에 몰림
+        if surgery_run_count >= 3 and surgery_income_ratio > 0.4:
+            tags.append({
+                "id": "season_addict",
+                "label": "시즌컨텐츠중독자",
+                "desc": f"수술실 {surgery_run_count}회, 수익 비중 {surgery_income_ratio*100:.0f}%",
+            })
+
+        # 엉덩력GOAT: 총 플레이 시간 3시간 이상
+        if total_play_seconds >= 10800:
+            hours = total_play_seconds / 3600
+            tags.append({
+                "id": "endurance_goat",
+                "label": "엉덩력GOAT",
+                "desc": f"총 플레이 {hours:.1f}시간",
+            })
+
+        # 재빠른스핀: 평균 런 시간 50초 이내 + 시간당 40회 이상
+        if avg_run_seconds > 0 and avg_run_seconds <= 50 and runs_per_hour >= 40:
+            tags.append({
+                "id": "fast_spin",
+                "label": "재빠른스핀",
+                "desc": f"평균 {avg_run_seconds:.0f}초/런, {runs_per_hour:.0f}회/시간",
+            })
+
+        # 여유를즐기는자: 맵핑/총 플레이 비율이 50% 미만
+        if total_play_seconds > 0 and efficiency_ratio < 0.5:
+            tags.append({
+                "id": "leisurely",
+                "label": "여유를즐기는자",
+                "desc": f"맵핑 비율 {efficiency_ratio*100:.0f}% (나머지는 마을/거래소 등)",
+            })
+
+        # 입장료과다지출: 총 수익 대비 지출 비율이 높음
+        if total_gross_value > 0 and cost_ratio > 0.3:
+            tags.append({
+                "id": "overspender",
+                "label": "입장료과다지출",
+                "desc": f"입장 비용이 총 수익의 {cost_ratio*100:.0f}%",
+            })
+
+        # HRHR (High Risk High Return): 지출도 크고 수익도 큰 경우
+        if total_entry_cost > 500 and total_net_profit > 3000:
+            tags.append({
+                "id": "hrhr",
+                "label": "HRHR",
+                "desc": f"지출 {total_entry_cost:.0f} / 순수익 {total_net_profit:.0f} 결정",
+            })
+
+        # 파밍의신: 누적 수입 15000 결정 이상
+        if total_net_profit >= 15000:
+            tags.append({
+                "id": "farming_god",
+                "label": "파밍의신",
+                "desc": f"누적 순수익 {total_net_profit:.0f} 결정",
+            })
+
+        return tags
+
+    @staticmethod
+    def _generate_analysis(stats: dict) -> tuple[str, str]:
+        """Generate a farming style classification and summary for a session."""
+        cv = stats.get("profit_cv", 0)
+        hr = stats.get("high_run_ratio", 0)
+        efficiency = stats.get("radar_efficiency", 0)
+        runs_per_hour = stats.get("runs_per_hour", 0)
+
+        if cv < 0.4 and hr < 0.1:
+            return (
+                "stable",
+                "수익 편차가 낮아 꾸준한 수입을 기대할 수 있습니다. "
+                "하이런 비율은 낮지만 안정적입니다.",
+            )
+        elif hr > 0.15 and cv > 0.5:
+            return (
+                "burst",
+                "하이런 비율이 높아 대박 가능성이 크지만, "
+                "수익 변동이 큽니다.",
+            )
+        elif efficiency > 0.7 and runs_per_hour > 30:
+            return (
+                "efficient",
+                "빠른 런 속도와 높은 맵핑 효율로 "
+                "시간 대비 성과가 좋습니다.",
+            )
+        else:
+            return (
+                "balanced",
+                "전반적으로 균형 잡힌 파밍입니다.",
+            )
+
+    @staticmethod
+    def _generate_recommendation(sessions_stats: list[dict]) -> str:
+        """Generate a recommendation comparing sessions."""
+        if not sessions_stats:
+            return ""
+
+        if len(sessions_stats) == 1:
+            s = sessions_stats[0]
+            atype, _ = Repository._generate_analysis(s)
+            type_labels = {
+                "stable": "안정형",
+                "burst": "폭발형",
+                "efficient": "효율형",
+                "balanced": "균형형",
+            }
+            return (
+                f"'{s['name']}'은(는) {type_labels.get(atype, '균형형')} "
+                f"파밍 세션입니다."
+            )
+
+        best_profit = max(
+            sessions_stats, key=lambda s: s.get("profit_per_hour_mapping", 0)
+        )
+        best_stable = min(
+            sessions_stats, key=lambda s: s.get("profit_cv", float("inf"))
+        )
+
+        if best_profit["session_id"] == best_stable["session_id"]:
+            return (
+                f"'{best_profit['name']}'이(가) "
+                f"수익성과 안정성 모두 우수합니다."
+            )
+        else:
+            return (
+                f"안정적 파밍을 원하면 '{best_stable['name']}', "
+                f"높은 수익을 노리면 '{best_profit['name']}'"
+            )

@@ -10,8 +10,13 @@ function showCustomTitlebar() {
     isFramelessMode = true;
     const titlebar = document.getElementById('custom-titlebar');
     if (titlebar) {
-        titlebar.classList.remove('hidden');
-        document.body.classList.add('has-titlebar');
+        titlebar.classList.add('frameless-mode');
+    }
+
+    // Show window buttons (minimize/close) in frameless mode
+    const windowButtons = document.querySelector('.titlebar-window-buttons');
+    if (windowButtons) {
+        windowButtons.style.display = 'flex';
     }
 
     // Show resize handles
@@ -19,6 +24,34 @@ function showCustomTitlebar() {
     if (resizeHandles) {
         resizeHandles.classList.remove('hidden');
         initResizeHandles();
+    }
+}
+
+// --- Tab System ---
+function switchTab(viewId) {
+    // Hide all tab views
+    document.querySelectorAll('.tab-view').forEach(v => {
+        v.classList.add('hidden');
+        v.classList.remove('active');
+    });
+
+    // Show selected view
+    const targetView = document.getElementById(viewId);
+    if (targetView) {
+        targetView.classList.remove('hidden');
+        targetView.classList.add('active');
+    }
+
+    // Update tab button active states
+    document.querySelectorAll('.titlebar-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.view === viewId);
+    });
+
+    // Load sessions when switching to session tab
+    if (viewId === 'session-view') {
+        if (typeof loadSessions === 'function') {
+            loadSessions();
+        }
     }
 }
 
@@ -158,6 +191,9 @@ let cloudStartupRefresh = true;
 
 // Map costs state
 let mapCostsEnabled = false;
+
+// High run threshold (loaded from settings, default 100)
+let highRunThreshold = 100;
 
 // Update state
 let updateStatus = null;
@@ -425,6 +461,33 @@ async function handleMapCostsToggle(event) {
     toggle.disabled = false;
 }
 
+// High run threshold setting functions
+async function fetchHighRunThreshold() {
+    try {
+        const response = await fetch(`${API_BASE}/settings/high_run_threshold`);
+        if (!response.ok) return 100;
+        const data = await response.json();
+        return data.value ? parseFloat(data.value) : 100;
+    } catch (error) {
+        console.error('Error fetching high run threshold:', error);
+        return 100;
+    }
+}
+
+async function updateHighRunThreshold(value) {
+    try {
+        const response = await fetch(`${API_BASE}/settings/high_run_threshold`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: String(value) })
+        });
+        return response.ok;
+    } catch (error) {
+        console.error('Error updating high run threshold:', error);
+        return false;
+    }
+}
+
 // Pause settings functions
 async function loadPauseSettings() {
     const state = await fetchTimeState();
@@ -687,7 +750,7 @@ function renderRuns(data, forceRender = false) {
         // Show net value if costs are enabled and there are costs
         const runProfit = (run.net_value_fe !== null && run.net_value_fe !== undefined && run.map_cost_fe > 0)
             ? run.net_value_fe : run.total_value;
-        const runHighBadge = (runProfit >= 100 && (window._bestRunProfit <= 0 || runProfit >= window._bestRunProfit))
+        const runHighBadge = (runProfit >= highRunThreshold && (window._bestRunProfit <= 0 || runProfit >= window._bestRunProfit))
             ? '<span class="high-run-badge">HIGH RUN</span>' : '';
 
         let valueDisplay;
@@ -1074,7 +1137,7 @@ function renderActiveRun(data, forceRender = false) {
     const activeNetValue = (data.map_cost_fe !== null && data.map_cost_fe !== undefined && data.map_cost_fe > 0)
         ? (data.net_value_fe !== null ? data.net_value_fe : data.total_value)
         : data.total_value;
-    const isHighRun = activeNetValue >= 100 && (window._bestRunProfit <= 0 || activeNetValue > window._bestRunProfit);
+    const isHighRun = activeNetValue >= highRunThreshold && (window._bestRunProfit <= 0 || activeNetValue > window._bestRunProfit);
     const highRunBadge = isHighRun ? '<span class="high-run-badge">HIGH RUN</span>' : '';
     zoneEl.innerHTML = `${escapeHtml(data.zone_name)}${highRunBadge}`;
 
@@ -1764,21 +1827,24 @@ async function openSettingsModal() {
     // Load current settings and store originals
     const tradeTaxValue = await fetchTradeTaxSetting();
     const mapCostsValue = await fetchMapCostsSetting();
+    const highRunThresholdValue = await fetchHighRunThreshold();
     tradeTaxToggle.checked = tradeTaxValue;
     mapCostsToggle.checked = mapCostsValue;
-    
+    document.getElementById('settings-high-run-threshold').value = highRunThresholdValue;
+
     // Load pause settings from time state
     await loadPauseSettings();
-    
+
     // Load refresh interval from localStorage
     const savedInterval = parseFloat(localStorage.getItem('refreshInterval')) || 1;
     document.getElementById('refresh-interval-slider').value = savedInterval;
     document.getElementById('refresh-interval-input').value = savedInterval;
-    
+
     // Store original values for cancel functionality
     originalSettings = {
         tradeTax: tradeTaxValue,
         mapCosts: mapCostsValue,
+        highRunThreshold: highRunThresholdValue,
         pauseBag: document.getElementById('pause-bag').checked,
         pausePet: document.getElementById('pause-pet').checked,
         pauseTalent: document.getElementById('pause-talent').checked,
@@ -1893,6 +1959,7 @@ function cancelSettings() {
     document.getElementById('cloud-startup-refresh').checked = originalSettings.cloudStartupRefresh;
     document.getElementById('refresh-interval-slider').value = originalSettings.refreshInterval;
     document.getElementById('refresh-interval-input').value = originalSettings.refreshInterval;
+    document.getElementById('settings-high-run-threshold').value = originalSettings.highRunThreshold;
 
     // Revert overlay settings
     if (typeof window.pywebview !== 'undefined' && window.pywebview.api) {
@@ -1928,7 +1995,14 @@ async function saveAllSettings() {
         const cloudExchangeOverrideVal = document.getElementById('cloud-exchange-override').checked;
         const cloudStartupRefreshVal = document.getElementById('cloud-startup-refresh').checked;
         const refreshIntervalVal = parseFloat(document.getElementById('refresh-interval-input').value) || 1;
-        
+        const highRunThresholdVal = parseFloat(document.getElementById('settings-high-run-threshold').value) || 100;
+
+        // Save high run threshold if changed
+        if (highRunThresholdVal !== originalSettings.highRunThreshold) {
+            await updateHighRunThreshold(highRunThresholdVal);
+            highRunThreshold = highRunThresholdVal;
+        }
+
         // Save trade tax setting using existing function
         if (tradeTaxVal !== originalSettings.tradeTax) {
             await updateTradeTaxSetting(tradeTaxVal);
@@ -2471,6 +2545,7 @@ document.addEventListener('keydown', (e) => {
         closePriceHistoryModal();
         closeSettingsModal();
         closeLootReportModal();
+        closeCompareModal();
     }
 });
 
@@ -3027,16 +3102,46 @@ function closeResetModal() {
 }
 
 async function executeReset(type) {
-    const btn = event.target.closest('.reset-option-btn');
+    const btn = event.target.closest('.reset-confirm-btn, .reset-option-btn');
     if (btn) {
         btn.disabled = true;
         btn.style.opacity = '0.5';
     }
-    
+
     let success = false;
-    
+
     try {
-        if (type === 'runs') {
+        if (type === 'save_session') {
+            // 세션 저장 & 초기화
+            const nameInput = document.getElementById('session-name-input');
+            const name = nameInput ? nameInput.value.trim() : '';
+
+            const response = await fetch(`${API_BASE}/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name || null })
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                // 캐시 초기화
+                lastRunsHash = null;
+                lastStatsHash = null;
+                lastInventoryHash = null;
+                lastActiveRunHash = null;
+                lastActiveRunId = null;
+                lastPlayerHash = null;
+
+                await refreshAll(true);
+                await syncTimeState();
+                closeResetModal();
+
+                // 이름 입력 필드 초기화
+                if (nameInput) nameInput.value = '';
+            } else {
+                alert('세션 저장 실패. 다시 시도해주세요.');
+            }
+        } else if (type === 'runs') {
             const result = await postResetStats();
             success = result && result.success;
         } else if (type === 'mapping') {
@@ -3053,26 +3158,29 @@ async function executeReset(type) {
             const timeResult = await timeResponse.json();
             success = (runsResult && runsResult.success) && (timeResult && timeResult.success);
         }
-        
-        if (success) {
-            lastRunsHash = null;
-            lastStatsHash = null;
-            lastInventoryHash = null;
-            lastActiveRunHash = null;
-            lastActiveRunId = null;
-            lastPlayerHash = null;
-            
-            await refreshAll(true);
-            await syncTimeState();
-            closeResetModal();
-        } else {
-            alert('초기화 실패. 다시 시도해주세요.');
+
+        // save_session은 위에서 자체 처리하므로 나머지 타입만 여기서 처리
+        if (type !== 'save_session') {
+            if (success) {
+                lastRunsHash = null;
+                lastStatsHash = null;
+                lastInventoryHash = null;
+                lastActiveRunHash = null;
+                lastActiveRunId = null;
+                lastPlayerHash = null;
+
+                await refreshAll(true);
+                await syncTimeState();
+                closeResetModal();
+            } else {
+                alert('초기화 실패. 다시 시도해주세요.');
+            }
         }
     } catch (error) {
         console.error('Reset error:', error);
         alert('초기화 중 오류가 발생했습니다.');
     }
-    
+
     if (btn) {
         btn.disabled = false;
         btn.style.opacity = '1';
@@ -3456,12 +3564,527 @@ async function exitApp() {
     }
 }
 
+// ========== 세션 분석 탭 ==========
+
+let selectedSessionId = null;
+let selectedCompareIds = new Set();  // 비교용 선택된 세션 ID들
+
+async function loadSessions() {
+    try {
+        const response = await fetch(`${API_BASE}/sessions`);
+        const data = await response.json();
+        renderSessionList(data.sessions || []);
+    } catch (err) {
+        console.error('세션 목록 로드 실패:', err);
+    }
+}
+
+function renderSessionList(sessions) {
+    const listEl = document.getElementById('session-list');
+    const countEl = document.getElementById('session-count');
+
+    if (!listEl) return;
+
+    countEl.textContent = `${sessions.length}개`;
+
+    if (!sessions.length) {
+        listEl.innerHTML = '<p class="no-sessions">저장된 세션이 없습니다</p>';
+        return;
+    }
+
+    listEl.innerHTML = sessions.map(s => {
+        const isSelected = s.id === selectedSessionId;
+        const isCompare = selectedCompareIds.has(s.id);
+        const duration = formatTimeDisplay(s.total_play_seconds || 0);
+        const profit = (s.total_net_profit_fe || 0).toFixed(1);
+
+        return `
+            <div class="session-item ${isSelected ? 'selected' : ''} ${isCompare ? 'compare-selected' : ''}"
+                 data-session-id="${s.id}"
+                 onclick="selectSession(${s.id})"
+                 >
+                <div class="session-item-checkbox" onclick="event.stopPropagation(); toggleCompareSession(${s.id})">
+                    <span class="checkbox-icon">${isCompare ? '\u2611' : '\u2610'}</span>
+                </div>
+                <div class="session-item-info">
+                    <span class="session-name" id="session-name-${s.id}" ondblclick="event.stopPropagation(); startEditSessionName(${s.id}, this)">${s.name}</span>
+                    <span class="session-meta">${s.created_at ? new Date(s.created_at).toLocaleDateString('ko-KR') : ''}</span>
+                </div>
+                <div class="session-item-stats">
+                    <span class="session-stat">${s.run_count || 0}런</span>
+                    <span class="session-stat profit">${profit} 결정</span>
+                    <span class="session-stat">${duration}</span>
+                </div>
+                <button class="session-delete-btn" onclick="event.stopPropagation(); deleteSession(${s.id})" title="세션 삭제">\u2715</button>
+            </div>
+        `;
+    }).join('');
+}
+
+async function selectSession(sessionId) {
+    selectedSessionId = sessionId;
+
+    // UI 선택 상태 업데이트
+    document.querySelectorAll('.session-item').forEach(item => {
+        item.classList.toggle('selected', parseInt(item.dataset.sessionId) === sessionId);
+    });
+
+    // 통계 로드
+    try {
+        const response = await fetch(`${API_BASE}/sessions/${sessionId}/stats`);
+        const stats = await response.json();
+        renderSessionStats(stats);
+    } catch (err) {
+        console.error('세션 통계 로드 실패:', err);
+    }
+}
+
+function renderSessionStats(stats) {
+    const grid = document.getElementById('session-stats-grid');
+    const title = document.getElementById('session-dashboard-title');
+    const tagsEl = document.getElementById('session-tags');
+
+    if (!stats || stats.error) {
+        if (grid) grid.classList.add('hidden');
+        if (tagsEl) tagsEl.innerHTML = '<span class="session-tags-hint">아래 목록에서 세션을 선택하세요</span>';
+        return;
+    }
+
+    // 통계 그리드 표시
+    if (grid) grid.classList.remove('hidden');
+    if (title) title.textContent = `세션 통계: ${stats.name || ''}`;
+
+    // 태그 렌더링
+    renderSessionTags(stats.tags || [], tagsEl);
+
+    // 수익 메트릭
+    setTextSafe('sess-mapping-min-avg', (stats.profit_per_minute_mapping || 0).toFixed(1));
+    setTextSafe('sess-mapping-hour-avg', (stats.profit_per_hour_mapping || 0).toFixed(1));
+    setTextSafe('sess-total-min-avg', (stats.profit_per_minute_total || 0).toFixed(1));
+    setTextSafe('sess-total-hour-avg', (stats.profit_per_hour_total || 0).toFixed(1));
+
+    // 그리드 메트릭
+    setTextSafe('sess-run-count', `${stats.run_count || 0}회`);
+    setTextSafe('sess-runs-per-hour', `${(stats.runs_per_hour || 0).toFixed(1)}회`);
+
+    // 평균 런 시간
+    const avgSec = stats.avg_run_seconds || 0;
+    const avgMin = Math.floor(avgSec / 60);
+    const avgRemSec = Math.floor(avgSec % 60);
+    setTextSafe('sess-avg-run-time', `${avgMin}분 ${avgRemSec}초`);
+
+    setTextSafe('sess-total-cost', `${(stats.total_entry_cost_fe || 0).toFixed(1)} 결정`);
+    setTextSafe('sess-total-profit', `${(stats.total_net_profit_fe || 0).toFixed(1)} 결정`);
+    // 하이런 기준값 라벨 업데이트
+    const threshold = stats.high_run_threshold || 100;
+    setTextSafe('sess-high-run-label', `하이런 횟수 (${threshold}+ 결정)`);
+    setTextSafe('sess-high-run-ratio-label', `하이런 비율 (${threshold}+ 결정)`);
+    setTextSafe('sess-high-run-count', `${stats.high_run_count || 0}회`);
+    setTextSafe('sess-high-run-ratio', `${((stats.high_run_ratio || 0) * 100).toFixed(1)}%`);
+    setTextSafe('sess-top-10-avg', `${(stats.top_10_avg_profit_fe || 0).toFixed(1)} 결정`);
+
+    // 수익 안정성 표시
+    const cv = stats.profit_cv || 0;
+    let stabilityText = '-';
+    if (stats.run_count >= 2) {
+        if (cv < 0.3) stabilityText = '매우 안정';
+        else if (cv < 0.5) stabilityText = '안정';
+        else if (cv < 0.7) stabilityText = '보통';
+        else if (cv < 1.0) stabilityText = '변동';
+        else stabilityText = '매우 변동';
+    }
+    setTextSafe('sess-stability', stabilityText);
+
+    // 수술실 통계
+    setTextSafe('sess-surgery-count', `${stats.surgery_run_count || 0}회`);
+    setTextSafe('sess-surgery-profit', `${(stats.surgery_profit_fe || 0).toFixed(1)} 결정`);
+}
+
+function renderSessionTags(tags, container) {
+    if (!container) return;
+    if (!tags || tags.length === 0) {
+        container.innerHTML = '<span class="session-tags-hint">태그 없음</span>';
+        return;
+    }
+    container.innerHTML = tags.map(t =>
+        `<span class="session-tag tag-${t.id}" title="${t.desc}">${t.label}</span>`
+    ).join('');
+}
+
+function setTextSafe(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
+// 인라인 이름 편집
+function startEditSessionName(sessionId, el) {
+    const currentName = el.textContent;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentName;
+    input.className = 'session-name-edit';
+
+    input.onblur = () => finishEditSessionName(sessionId, input, el, currentName);
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') input.blur();
+        if (e.key === 'Escape') {
+            input.value = currentName;
+            input.blur();
+        }
+    };
+
+    el.textContent = '';
+    el.appendChild(input);
+    input.focus();
+    input.select();
+}
+
+async function finishEditSessionName(sessionId, input, el, oldName) {
+    const newName = input.value.trim();
+
+    if (newName && newName !== oldName) {
+        try {
+            await fetch(`${API_BASE}/sessions/${sessionId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newName })
+            });
+            el.textContent = newName;
+
+            // 대시보드 제목도 업데이트
+            if (selectedSessionId === sessionId) {
+                const title = document.getElementById('session-dashboard-title');
+                if (title) title.textContent = `세션 통계: ${newName}`;
+            }
+        } catch (err) {
+            el.textContent = oldName;
+        }
+    } else {
+        el.textContent = oldName;
+    }
+}
+
+async function deleteSession(sessionId) {
+    if (!confirm('이 세션을 삭제하시겠습니까? 세션의 모든 런 데이터가 삭제됩니다.')) return;
+
+    try {
+        await fetch(`${API_BASE}/sessions/${sessionId}`, { method: 'DELETE' });
+
+        if (selectedSessionId === sessionId) {
+            selectedSessionId = null;
+            const grid = document.getElementById('session-stats-grid');
+            const title = document.getElementById('session-dashboard-title');
+            const tagsEl = document.getElementById('session-tags');
+            if (grid) grid.classList.add('hidden');
+            if (title) title.textContent = '세션 통계';
+            if (tagsEl) tagsEl.innerHTML = '<span class="session-tags-hint">아래 목록에서 세션을 선택하세요</span>';
+        }
+
+        selectedCompareIds.delete(sessionId);
+        updateCompareButton();
+        await loadSessions();
+    } catch (err) {
+        console.error('세션 삭제 실패:', err);
+    }
+}
+
+// 비교 선택 토글
+function toggleCompareSession(sessionId) {
+    if (selectedCompareIds.has(sessionId)) {
+        selectedCompareIds.delete(sessionId);
+    } else {
+        if (selectedCompareIds.size >= 3) {
+            // 이미 3개 선택됨 - 가장 먼저 선택한 것 제거
+            const first = selectedCompareIds.values().next().value;
+            selectedCompareIds.delete(first);
+        }
+        selectedCompareIds.add(sessionId);
+    }
+    updateCompareButton();
+
+    // UI 업데이트
+    document.querySelectorAll('.session-item').forEach(item => {
+        const id = parseInt(item.dataset.sessionId);
+        const checkbox = item.querySelector('.checkbox-icon');
+        const isCompare = selectedCompareIds.has(id);
+        item.classList.toggle('compare-selected', isCompare);
+        if (checkbox) checkbox.textContent = isCompare ? '\u2611' : '\u2610';
+    });
+}
+
+function updateCompareButton() {
+    const btn = document.getElementById('session-compare-btn');
+    if (btn) {
+        const count = selectedCompareIds.size;
+        btn.disabled = count < 2;
+        btn.textContent = count > 0 ? `세션 비교 (${count})` : '세션 비교';
+    }
+}
+
+// --- Phase 7: 세션 비교 모달 (레이더 차트 + 심층 분석) ---
+let radarChart = null;  // Chart.js 레이더 차트 인스턴스
+
+async function openCompareModal() {
+    const ids = Array.from(selectedCompareIds);
+    if (ids.length < 2) return;
+
+    try {
+        const response = await fetch(`${API_BASE}/sessions/compare`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_ids: ids })
+        });
+        const data = await response.json();
+
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+
+        // 모달을 먼저 표시한 후 차트 렌더링 (hidden 상태에서는 canvas 크기가 0)
+        document.getElementById('compare-modal').classList.remove('hidden');
+        requestAnimationFrame(() => {
+            renderCompareModal(data);
+        });
+    } catch (err) {
+        console.error('세션 비교 실패:', err);
+    }
+}
+
+function closeCompareModal() {
+    document.getElementById('compare-modal').classList.add('hidden');
+    if (radarChart) {
+        radarChart.destroy();
+        radarChart = null;
+    }
+}
+
+// Close compare modal on outside click
+document.addEventListener('DOMContentLoaded', () => {
+    const compareModal = document.getElementById('compare-modal');
+    if (compareModal) {
+        compareModal.addEventListener('click', (e) => {
+            if (e.target.id === 'compare-modal') {
+                closeCompareModal();
+            }
+        });
+    }
+});
+
+function renderCompareModal(data) {
+    const sessions = data.sessions;
+    const radar = data.radar_normalized;
+    const analysis = data.analysis;
+
+    // 컬럼 헤더 업데이트
+    const col3 = document.getElementById('compare-col-3');
+    sessions.forEach((s, i) => {
+        const colEl = document.getElementById(`compare-col-${i + 1}`);
+        if (colEl) colEl.textContent = s.name;
+    });
+    if (col3) col3.classList.toggle('hidden', sessions.length < 3);
+
+    // 레이더 차트 렌더링
+    renderRadarChart(sessions, radar);
+
+    // 범례 렌더링
+    renderCompareLegend(sessions);
+
+    // 상세 테이블 렌더링
+    renderCompareTable(sessions);
+
+    // 분석 코멘트 렌더링
+    renderCompareAnalysis(analysis, data.recommendation);
+}
+
+function renderRadarChart(sessions, radarData) {
+    const canvas = document.getElementById('radar-chart');
+    if (!canvas) return;
+
+    // 기존 차트 제거
+    if (radarChart) {
+        radarChart.destroy();
+    }
+
+    const labels = ['수익성', '안정성', '효율성', '폭발력', '속도', '규모'];
+    const colors = [
+        { bg: 'rgba(233, 69, 96, 0.2)', border: 'rgba(233, 69, 96, 0.8)' },   // 빨강
+        { bg: 'rgba(78, 204, 163, 0.2)', border: 'rgba(78, 204, 163, 0.8)' },  // 초록
+        { bg: 'rgba(78, 163, 235, 0.2)', border: 'rgba(78, 163, 235, 0.8)' },  // 파랑
+    ];
+
+    const datasets = radarData.map((r, i) => ({
+        label: sessions[i].name,
+        data: [
+            r.profitability || 0,
+            r.stability || 0,
+            r.efficiency || 0,
+            r.burst || 0,
+            r.speed || 0,
+            r.scale || 0,
+        ],
+        backgroundColor: colors[i].bg,
+        borderColor: colors[i].border,
+        borderWidth: 2,
+        pointBackgroundColor: colors[i].border,
+        pointBorderColor: '#fff',
+        pointBorderWidth: 1,
+        pointRadius: 4,
+    }));
+
+    radarChart = new Chart(canvas, {
+        type: 'radar',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                r: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        stepSize: 20,
+                        color: 'rgba(255,255,255,0.3)',
+                        backdropColor: 'transparent',
+                        font: { size: 10 }
+                    },
+                    grid: {
+                        color: 'rgba(255,255,255,0.1)',
+                    },
+                    angleLines: {
+                        color: 'rgba(255,255,255,0.1)',
+                    },
+                    pointLabels: {
+                        color: '#eaeaea',
+                        font: { size: 13, family: 'Pretendard' },
+                    }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.dataset.label}: ${context.raw.toFixed(0)}`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderCompareLegend(sessions) {
+    const legendEl = document.getElementById('compare-legend');
+    if (!legendEl) return;
+
+    const colors = ['#e94560', '#4ecca3', '#4ea3eb'];
+    legendEl.innerHTML = sessions.map((s, i) => `
+        <span class="legend-item">
+            <span class="legend-dot" style="background: ${colors[i]}"></span>
+            ${s.name}
+        </span>
+    `).join('');
+}
+
+function renderCompareTable(sessions) {
+    const tbody = document.getElementById('compare-table-body');
+    if (!tbody) return;
+
+    // 하이런 기준값을 세션 데이터에서 가져옴
+    const thresholdVal = (sessions.length > 0 && sessions[0].high_run_threshold) ? sessions[0].high_run_threshold : 100;
+
+    const metrics = [
+        { key: 'profit_per_hour_mapping', label: '맵핑 시간당 수익', unit: ' 결정/h', decimals: 1, higher: true },
+        { key: 'profit_per_minute_mapping', label: '맵핑 분당 수익', unit: ' 결정/m', decimals: 1, higher: true },
+        { key: 'profit_per_hour_total', label: '총플레이 시간당 수익', unit: ' 결정/h', decimals: 1, higher: true },
+        { key: 'total_net_profit_fe', label: '총 순수익', unit: ' 결정', decimals: 1, higher: true },
+        { key: 'total_entry_cost_fe', label: '총 입장비용', unit: ' 결정', decimals: 1, higher: false },
+        { key: 'run_count', label: '런 횟수', unit: '회', decimals: 0, higher: true },
+        { key: 'runs_per_hour', label: '시간당 런 횟수', unit: '회/h', decimals: 1, higher: true },
+        { key: 'avg_run_seconds', label: '평균 런 시간', unit: '', decimals: 0, higher: false, isTime: true },
+        { key: 'high_run_count', label: `하이런 횟수 (${thresholdVal}+)`, unit: '회', decimals: 0, higher: true },
+        { key: 'high_run_ratio', label: `하이런 비율 (${thresholdVal}+)`, unit: '', decimals: 1, higher: true, isPercent: true },
+        { key: 'top_10_avg_profit_fe', label: '상위 10% 평균', unit: ' 결정', decimals: 1, higher: true },
+        { key: 'profit_cv', label: '수익 변동계수', unit: '', decimals: 2, higher: false },
+        { key: 'max_run_profit_fe', label: '최고 런 수익', unit: ' 결정', decimals: 1, higher: true },
+        { key: 'median_run_profit_fe', label: '중앙값 런 수익', unit: ' 결정', decimals: 1, higher: true },
+    ];
+
+    tbody.innerHTML = metrics.map(m => {
+        const values = sessions.map(s => s[m.key] || 0);
+        const best = m.higher ? Math.max(...values) : Math.min(...values);
+
+        const cells = sessions.map((s, i) => {
+            const val = s[m.key] || 0;
+            let display;
+            if (m.isTime) {
+                const mins = Math.floor(val / 60);
+                const secs = Math.floor(val % 60);
+                display = `${mins}분 ${secs}초`;
+            } else if (m.isPercent) {
+                display = `${(val * 100).toFixed(m.decimals)}%`;
+            } else {
+                display = val.toFixed(m.decimals) + m.unit;
+            }
+
+            const isBest = values.filter(v => v === best).length < values.length && val === best;
+            return `<td class="${isBest ? 'best-value' : ''} ${i === 2 && sessions.length < 3 ? 'hidden' : ''}">${display}${isBest ? ' \u2605' : ''}</td>`;
+        }).join('');
+
+        // 3번째 컬럼이 없을 때 빈 td 추가
+        const extraTd = sessions.length < 3 ? '<td class="hidden"></td>' : '';
+
+        return `<tr><td class="metric-label">${m.label}</td>${cells}${extraTd}</tr>`;
+    }).join('');
+}
+
+function renderCompareAnalysis(analysis, recommendation) {
+    const analysisEl = document.getElementById('compare-analysis');
+    const recoEl = document.getElementById('compare-recommendation');
+
+    if (analysisEl) {
+        const typeLabels = {
+            'stable': '안정형 파밍',
+            'burst': '폭발형 파밍',
+            'efficient': '효율형 파밍',
+            'balanced': '균형형 파밍'
+        };
+        const typeIcons = {
+            'stable': '\uD83D\uDEE1\uFE0F',
+            'burst': '\uD83D\uDCA5',
+            'efficient': '\u26A1',
+            'balanced': '\u2696\uFE0F'
+        };
+
+        analysisEl.innerHTML = analysis.map(a => `
+            <div class="analysis-item">
+                <div class="analysis-header">
+                    <span class="analysis-icon">${typeIcons[a.type] || '\uD83D\uDCCA'}</span>
+                    <strong>${a.name || `세션 ${a.session_id}`}</strong>
+                    <span class="analysis-type-badge type-${a.type}">${typeLabels[a.type] || a.type}</span>
+                </div>
+                <p class="analysis-text">${a.summary}</p>
+            </div>
+        `).join('');
+    }
+
+    if (recoEl && recommendation) {
+        recoEl.innerHTML = `<div class="recommendation-box"><span class="reco-icon">\uD83D\uDCA1</span> <strong>추천:</strong> ${recommendation}</div>`;
+    }
+}
+
 // --- Initialization ---
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Titlebar is always visible now (for tab navigation)
+    // Add has-titlebar class so content gets proper top offset
+    document.body.classList.add('has-titlebar');
+
     // Initialize frameless mode if running in pywebview
+    // (this enables window buttons and resize handles)
     initFramelessMode();
-    
+
     // Initialize refresh interval controls
     initRefreshIntervalControls();
 
@@ -3488,6 +4111,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load initial map costs state
     mapCostsEnabled = await fetchMapCostsSetting();
+
+    // Load initial high run threshold
+    highRunThreshold = await fetchHighRunThreshold();
 
     // Set up cloud sync toggle (now a checkbox toggle switch)
     const cloudSyncCheckbox = document.getElementById('cloud-sync-checkbox');

@@ -27,6 +27,7 @@ class Preferences:
     cloud_midnight_refresh: bool = True
     cloud_exchange_override: bool = True
     cloud_startup_refresh: bool = True
+    high_run_threshold: float = 100.0  # 하이런 최소 결정 수량 (FE)
     log_directory: Optional[str] = None
 
 
@@ -57,6 +58,7 @@ def load_preferences() -> Preferences:
                 cloud_midnight_refresh=data.get("cloud_midnight_refresh", True),
                 cloud_exchange_override=data.get("cloud_exchange_override", True),
                 cloud_startup_refresh=data.get("cloud_startup_refresh", True),
+                high_run_threshold=float(data.get("high_run_threshold", 100.0)),
                 log_directory=data.get("log_directory"),
             )
         except (json.JSONDecodeError, IOError):

@@ -1,6 +1,6 @@
 """Database schema - DDL statements for SQLite."""
 
-SCHEMA_VERSION = 3  # Bumped for cloud sync support
+SCHEMA_VERSION = 4  # Bumped for session management support
 
 # Settings table - key/value configuration
 CREATE_SETTINGS = """
@@ -151,6 +151,26 @@ CREATE TABLE IF NOT EXISTS cloud_price_history (
 )
 """
 
+# Sessions table - farming session management
+CREATE_SESSIONS = """
+CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL DEFAULT 'Session 1',
+    created_at TEXT NOT NULL,
+    total_play_seconds REAL DEFAULT 0,
+    mapping_play_seconds REAL DEFAULT 0,
+    run_count INTEGER DEFAULT 0,
+    total_net_profit_fe REAL DEFAULT 0,
+    player_id TEXT,
+    season_id INTEGER,
+    status TEXT DEFAULT 'closed'
+)
+"""
+
+CREATE_SESSIONS_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_sessions_player ON sessions(player_id, season_id)
+"""
+
 ALL_CREATE_STATEMENTS = [
     CREATE_SETTINGS,
     CREATE_RUNS,
@@ -165,4 +185,6 @@ ALL_CREATE_STATEMENTS = [
     CREATE_CLOUD_SYNC_QUEUE,
     CREATE_CLOUD_PRICE_CACHE,
     CREATE_CLOUD_PRICE_HISTORY,
+    CREATE_SESSIONS,
+    CREATE_SESSIONS_INDEX,
 ]

@@ -1,0 +1,38 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "setup", "setup", "{8234297F-5141-16AD-017A-2883AE030302}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "overlay", "overlay", "{178A59AB-26FA-0D53-5A85-CE27EDD23CDA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TorchTrackerSetup", "setup\TorchTrackerSetup.csproj", "{2068D75F-8E3C-2BD8-6E34-DD476E576797}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TITrackOverlay", "overlay\TITrackOverlay\TITrackOverlay.csproj", "{EF86C600-AAA6-64F5-B0CC-B8CE14A33BE6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2068D75F-8E3C-2BD8-6E34-DD476E576797}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2068D75F-8E3C-2BD8-6E34-DD476E576797}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2068D75F-8E3C-2BD8-6E34-DD476E576797}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2068D75F-8E3C-2BD8-6E34-DD476E576797}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EF86C600-AAA6-64F5-B0CC-B8CE14A33BE6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EF86C600-AAA6-64F5-B0CC-B8CE14A33BE6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EF86C600-AAA6-64F5-B0CC-B8CE14A33BE6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EF86C600-AAA6-64F5-B0CC-B8CE14A33BE6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{2068D75F-8E3C-2BD8-6E34-DD476E576797} = {8234297F-5141-16AD-017A-2883AE030302}
+		{EF86C600-AAA6-64F5-B0CC-B8CE14A33BE6} = {178A59AB-26FA-0D53-5A85-CE27EDD23CDA}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E4F906D9-0CF3-4C5F-8CF7-211E10B114E0}
+	EndGlobalSection
+EndGlobal

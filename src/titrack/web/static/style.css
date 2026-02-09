@@ -18,6 +18,10 @@ body.has-titlebar #app-scroll-container {
     margin-top: 32px;
 }
 
+body.has-titlebar .session-scroll-container {
+    margin-top: 32px;
+}
+
 /* Custom Window Titlebar (frameless mode) */
 .custom-titlebar {
     position: fixed;
@@ -32,13 +36,54 @@ body.has-titlebar #app-scroll-container {
     user-select: none;
 }
 
-.custom-titlebar.hidden {
-    display: none;
-}
+/* Titlebar is always visible now for tab navigation */
 
 .titlebar-drag-region {
     flex: 1;
     height: 100%;
+    -webkit-app-region: drag;
+}
+
+/* Titlebar Tabs */
+.titlebar-tabs {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    gap: 0;
+}
+
+.titlebar-tab {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary, #a0a0a0);
+    padding: 0 16px;
+    height: 100%;
+    font-size: 13px;
+    font-family: 'Pretendard', sans-serif;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.titlebar-tab:hover {
+    color: var(--text-primary, #eaeaea);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.titlebar-tab.active {
+    color: var(--text-primary, #eaeaea);
+    border-bottom-color: var(--accent, #e94560);
+    font-weight: 600;
+}
+
+/* Window buttons hidden by default (shown in frameless mode via JS) */
+.titlebar-window-buttons {
+    display: none;
+}
+
+/* In frameless mode, enable drag region for window moving */
+.custom-titlebar.frameless-mode .titlebar-drag-region {
     -webkit-app-region: drag;
 }
 
@@ -870,6 +915,23 @@ header h1::after {
 .perf-row.mapping .perf-card,
 .perf-row.mapping .perf-value,
 .perf-row.mapping .perf-label {
+    color: white !important;
+}
+
+.perf-row-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+    min-width: 40px;
+    text-align: center;
+    opacity: 0.85;
+}
+
+.perf-row.total .perf-row-label {
+    color: black !important;
+}
+
+.perf-row.mapping .perf-row-label {
     color: white !important;
 }
 
@@ -2100,6 +2162,29 @@ tr.nightmare .zone-name {
     margin-bottom: 20px;
 }
 
+.session-name-input {
+    width: 100%;
+    padding: 8px 12px;
+    margin: 12px 0;
+    background: var(--bg-primary, #1a1a2e);
+    border: 1px solid var(--text-secondary, #a0a0a0);
+    border-radius: 4px;
+    color: var(--text-primary, #eaeaea);
+    font-size: 14px;
+    font-family: 'Pretendard', sans-serif;
+    box-sizing: border-box;
+}
+
+.session-name-input:focus {
+    outline: none;
+    border-color: var(--accent, #e94560);
+}
+
+.session-name-input::placeholder {
+    color: var(--text-secondary, #a0a0a0);
+    opacity: 0.7;
+}
+
 .reset-actions {
     display: flex;
     gap: 12px;
@@ -2868,6 +2953,46 @@ tr.nightmare .zone-name {
     opacity: 0.9;
 }
 
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px;
+    border-radius: 6px;
+}
+
+.settings-row label {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.threshold-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.threshold-input {
+    width: 80px;
+    padding: 4px 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--text-secondary);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 14px;
+    text-align: right;
+}
+
+.threshold-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.threshold-unit {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
 .settings-section-actions {
     margin-top: 15px;
 }
@@ -3347,4 +3472,496 @@ tr.nightmare .zone-name {
 @keyframes highRunPulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }
+}
+
+/* ===== Tab View System ===== */
+
+.tab-view {
+    display: block;
+    width: 100%;
+}
+
+.tab-view.hidden {
+    display: none !important;
+}
+
+/* ===== Session View Styles ===== */
+
+.session-scroll-container {
+    height: calc(100vh - 32px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.session-container {
+    min-width: 400px;
+    max-width: 1600px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 12px 20px 12px 30px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-height: 0;
+}
+
+.session-dashboard {
+    flex-shrink: 0;
+}
+
+.session-dashboard-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.session-dashboard-header h2 {
+    margin: 0;
+    white-space: nowrap;
+}
+
+.session-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.session-tags-hint {
+    font-size: 13px;
+    color: var(--text-secondary, #a0a0a0);
+}
+
+.session-tag {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: default;
+    white-space: nowrap;
+    letter-spacing: 0.3px;
+}
+
+.tag-dopamine_addict {
+    background: rgba(255, 0, 110, 0.2);
+    color: #ff006e;
+    border: 1px solid rgba(255, 0, 110, 0.3);
+}
+
+.tag-stability_first {
+    background: rgba(78, 204, 163, 0.2);
+    color: #4ecca3;
+    border: 1px solid rgba(78, 204, 163, 0.3);
+}
+
+.tag-season_addict {
+    background: rgba(187, 134, 252, 0.2);
+    color: #bb86fc;
+    border: 1px solid rgba(187, 134, 252, 0.3);
+}
+
+.tag-endurance_goat {
+    background: rgba(255, 183, 77, 0.2);
+    color: #ffb74d;
+    border: 1px solid rgba(255, 183, 77, 0.3);
+}
+
+.tag-fast_spin {
+    background: rgba(0, 229, 255, 0.2);
+    color: #00e5ff;
+    border: 1px solid rgba(0, 229, 255, 0.3);
+}
+
+.tag-leisurely {
+    background: rgba(129, 199, 132, 0.2);
+    color: #81c784;
+    border: 1px solid rgba(129, 199, 132, 0.3);
+}
+
+.tag-overspender {
+    background: rgba(255, 82, 82, 0.2);
+    color: #ff5252;
+    border: 1px solid rgba(255, 82, 82, 0.3);
+}
+
+.tag-hrhr {
+    background: rgba(255, 215, 0, 0.2);
+    color: #ffd700;
+    border: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+.tag-farming_god {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.3), rgba(255, 69, 0, 0.3));
+    color: #ffd700;
+    border: 1px solid rgba(255, 215, 0, 0.5);
+    text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+}
+
+.session-list-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.session-list-container {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 150px;
+}
+
+.session-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.no-sessions {
+    text-align: center;
+    color: var(--text-secondary, #a0a0a0);
+    padding: 40px 0;
+    font-size: 14px;
+}
+
+.session-count {
+    font-size: 13px;
+    color: var(--text-secondary, #a0a0a0);
+}
+
+/* Session Stats Grid */
+.session-stats-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.session-stats-grid.hidden {
+    display: none !important;
+}
+
+/* 세션 탭 확장 통계 그리드 (기본 정보 탭 .stats-grid 재사용) */
+.session-stats-extended {
+    flex: none;
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    margin-top: 0;
+}
+
+@media (max-width: 600px) {
+    .session-stats-extended {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Session List Controls */
+.session-list-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.compare-btn {
+    background: var(--accent, #e94560);
+    border: none;
+    color: white;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: 'Pretendard', sans-serif;
+    transition: opacity 0.2s;
+}
+
+.compare-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.compare-btn:not(:disabled):hover {
+    opacity: 0.85;
+}
+
+/* Session Item */
+.session-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--bg-secondary, #16213e);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.session-item:hover {
+    background: var(--card-bg, #0f3460);
+}
+
+.session-item.selected {
+    border-color: var(--accent, #e94560);
+    background: var(--card-bg, #0f3460);
+}
+
+.session-item.compare-selected {
+    border-color: var(--positive, #4ecca3);
+}
+
+.session-item.selected.compare-selected {
+    border-color: var(--accent, #e94560);
+    box-shadow: 0 0 0 1px var(--positive, #4ecca3);
+}
+
+.session-item-checkbox {
+    font-size: 16px;
+    width: 24px;
+    text-align: center;
+    color: var(--text-secondary, #a0a0a0);
+    cursor: pointer;
+}
+
+.session-item.compare-selected .session-item-checkbox {
+    color: var(--positive, #4ecca3);
+}
+
+.session-item-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.session-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary, #eaeaea);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.session-meta {
+    font-size: 11px;
+    color: var(--text-secondary, #a0a0a0);
+}
+
+.session-item-stats {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.session-stat {
+    font-size: 13px;
+    color: var(--text-secondary, #a0a0a0);
+    white-space: nowrap;
+}
+
+.session-stat.profit {
+    color: var(--positive, #4ecca3);
+    font-weight: 500;
+}
+
+.session-delete-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary, #a0a0a0);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: all 0.15s;
+}
+
+.session-item:hover .session-delete-btn {
+    opacity: 1;
+}
+
+.session-delete-btn:hover {
+    color: var(--negative, #ff6b6b);
+    background: rgba(255, 107, 107, 0.1);
+}
+
+/* Inline name edit */
+.session-name-edit {
+    background: var(--bg-primary, #1a1a2e);
+    border: 1px solid var(--accent, #e94560);
+    color: var(--text-primary, #eaeaea);
+    font-size: 14px;
+    font-family: 'Pretendard', sans-serif;
+    padding: 2px 6px;
+    border-radius: 3px;
+    width: 100%;
+    outline: none;
+}
+
+/* ===== Compare Modal ===== */
+.modal-compare {
+    max-width: 800px;
+    width: 90vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    border-radius: 12px;
+}
+
+.compare-body {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 20px;
+}
+
+/* Radar Chart */
+.compare-chart-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.compare-chart-section canvas {
+    width: 380px;
+    height: 340px;
+    max-width: 400px;
+    max-height: 350px;
+}
+
+.compare-legend {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-primary, #eaeaea);
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+/* Compare Table */
+.compare-table-section h4,
+.compare-analysis-section h4 {
+    margin: 0 0 12px 0;
+    font-size: 15px;
+    color: var(--text-primary, #eaeaea);
+}
+
+.compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.compare-table th {
+    text-align: center;
+    padding: 8px;
+    background: var(--bg-secondary, #16213e);
+    color: var(--text-secondary, #a0a0a0);
+    font-weight: 600;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.compare-table th:first-child {
+    text-align: left;
+}
+
+.compare-table td {
+    padding: 6px 8px;
+    text-align: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--text-primary, #eaeaea);
+}
+
+.compare-table td.metric-label {
+    text-align: left;
+    color: var(--text-secondary, #a0a0a0);
+    font-size: 12px;
+}
+
+.compare-table td.best-value {
+    color: var(--positive, #4ecca3);
+    font-weight: 600;
+}
+
+.compare-table td.hidden,
+.compare-table th.hidden {
+    display: none;
+}
+
+/* Analysis */
+.compare-analysis {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.analysis-item {
+    background: var(--bg-primary, #1a1a2e);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.analysis-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.analysis-icon {
+    font-size: 18px;
+}
+
+.analysis-type-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.type-stable { background: rgba(78, 204, 163, 0.2); color: #4ecca3; }
+.type-burst { background: rgba(233, 69, 96, 0.2); color: #e94560; }
+.type-efficient { background: rgba(78, 163, 235, 0.2); color: #4ea3eb; }
+.type-balanced { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+
+.analysis-text {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary, #a0a0a0);
+    line-height: 1.5;
+}
+
+.recommendation-box {
+    background: rgba(233, 69, 96, 0.1);
+    border: 1px solid rgba(233, 69, 96, 0.3);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 13px;
+    color: var(--text-primary, #eaeaea);
+    line-height: 1.5;
+    margin-top: 12px;
+}
+
+.reco-icon {
+    font-size: 16px;
 }

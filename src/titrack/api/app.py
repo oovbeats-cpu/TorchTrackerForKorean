@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from titrack.api.routes import cloud, icons, inventory, items, overlay, prices, runs, settings, stats, time, update
+from titrack.api.routes import cloud, icons, inventory, items, overlay, prices, runs, sessions, settings, stats, time, update
 from titrack.core.time_tracker import TimeTracker
 from titrack.api.schemas import PlayerResponse, StatusResponse
 from titrack.config.paths import get_static_dir
@@ -73,6 +73,7 @@ def create_app(
     app.dependency_overrides[icons.get_repository] = get_repository
     app.dependency_overrides[settings.get_repository] = get_repository
     app.dependency_overrides[cloud.get_repository] = get_repository
+    app.dependency_overrides[sessions.get_repository] = get_repository
 
     # Include routers
     app.include_router(runs.router)
@@ -83,6 +84,7 @@ def create_app(
     app.include_router(icons.router)
     app.include_router(settings.router)
     app.include_router(cloud.router)
+    app.include_router(sessions.router)
     app.include_router(update.router)
     app.include_router(time.router)
     app.include_router(overlay.router)
