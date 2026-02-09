@@ -175,5 +175,12 @@ class ParsedViewEvent:
     raw_line: str = ""
 
 
+@dataclass
+class ParsedContractSettingEvent:
+    """Parsed contract setting change event."""
+    contract_name: str
+    raw_line: str = ""
+
+
 # Type alias for any parsed event
-ParsedEvent = ParsedBagEvent | ParsedContextMarker | ParsedLevelEvent | ParsedLevelIdEvent | ParsedPlayerDataEvent | ParsedViewEvent | None
+ParsedEvent = ParsedBagEvent | ParsedContextMarker | ParsedLevelEvent | ParsedLevelIdEvent | ParsedPlayerDataEvent | ParsedViewEvent | ParsedContractSettingEvent | None

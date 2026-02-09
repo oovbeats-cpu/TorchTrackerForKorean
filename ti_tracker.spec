@@ -27,6 +27,14 @@ datas = [
     ('src/titrack/web/static/favicon.webp', 'titrack/web/static'),
 ]
 
+# Include WPF overlay if built (exe + native WPF DLLs)
+_wpf_overlay_dir = os.path.join('overlay', 'publish')
+_wpf_overlay_exe = os.path.join(_wpf_overlay_dir, 'TITrackOverlay.exe')
+if os.path.exists(_wpf_overlay_exe):
+    # Bundle entire publish directory into 'overlay' subdirectory
+    # to keep WPF native DLLs together and avoid conflicts
+    datas.append((_wpf_overlay_dir, 'overlay'))
+
 # Icon file path (use .ico for Windows)
 icon_file = 'src/titrack/web/static/app_icon.ico'
 

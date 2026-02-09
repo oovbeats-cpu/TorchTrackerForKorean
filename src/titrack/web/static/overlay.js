@@ -1,202 +1,245 @@
-// TITrack Overlay - In-game overlay logic
+// TITrack Overlay v3 - Fixed columns, game state sync, scale control
 
 const API_BASE = '/api';
 const POLL_INTERVAL = 2000;
+const BAR_HEIGHT = 30;
+const SETTINGS_POPUP_HEIGHT = 50;
 
-let lastData = {
-    currentProfit: null,
-    runTime: null,
-    totalTime: null,
-    fePerHour: null,
+// --- Formatting ---
+
+function formatTime(sec) {
+    if (sec == null || sec < 0) return '--:--';
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.floor(sec % 60);
+    if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function formatFE(v) {
+    if (v == null) return '--';
+    const n = parseFloat(v);
+    if (isNaN(n)) return '--';
+    if (Math.abs(n) >= 100000) return (n / 1000).toFixed(0) + 'k';
+    if (Math.abs(n) >= 10000) return (n / 1000).toFixed(1) + 'k';
+    return n.toFixed(1);
+}
+
+// --- DOM ---
+
+const el = {
+    profit: document.getElementById('s-profit'),
+    runTime: document.getElementById('s-run-time'),
+    totalProfit: document.getElementById('s-total-profit'),
+    totalTime: document.getElementById('s-total-time'),
+    mapHr: document.getElementById('s-map-hr'),
+    totalHr: document.getElementById('s-total-hr'),
+    contract: document.getElementById('s-contract'),
+    settingsBtn: document.getElementById('settings-btn'),
+    settingsPopup: document.getElementById('settings-popup'),
+    opacitySlider: document.getElementById('opacity-slider'),
+    opacityVal: document.getElementById('opacity-val'),
+    scaleSlider: document.getElementById('scale-slider'),
+    scaleVal: document.getElementById('scale-val'),
+    dragHandle: document.getElementById('drag-handle'),
 };
 
-// --- Formatting helpers ---
+// --- Local timer ---
 
-function formatTime(seconds) {
-    if (seconds == null || seconds < 0) return '--:--';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    if (h > 0) {
-        return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+let localRunSec = 0, localTotalSec = 0;
+let isMappingPlaying = false, isTotalPlaying = false;
+
+setInterval(function() {
+    if (isMappingPlaying) {
+        localRunSec++;
+        el.runTime.textContent = formatTime(localRunSec);
     }
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
-function formatFE(value) {
-    if (value == null) return '--';
-    const num = parseFloat(value);
-    if (isNaN(num)) return '--';
-    if (Math.abs(num) >= 1000) {
-        return num.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+    if (isTotalPlaying) {
+        localTotalSec++;
+        el.totalTime.textContent = formatTime(localTotalSec);
     }
-    return num.toLocaleString('ko-KR', { maximumFractionDigits: 1 });
-}
-
-// --- DOM references ---
-
-const elCurrentProfit = document.getElementById('current-profit');
-const elRunTime = document.getElementById('run-time');
-const elTotalTime = document.getElementById('total-time');
-const elFePerHour = document.getElementById('fe-per-hour');
-const elSettingsBtn = document.getElementById('settings-btn');
-const elSettingsPanel = document.getElementById('settings-panel');
-const elOpacitySlider = document.getElementById('opacity-slider');
-const elOpacityValue = document.getElementById('opacity-value');
-const elCloseBtn = document.getElementById('close-btn');
-
-// --- Local timer for smooth updates ---
-let localRunSeconds = 0;
-let localTotalSeconds = 0;
-let isMappingPlaying = false;
-let isTotalPlaying = false;
-let localTimerInterval = null;
-
-function startLocalTimer() {
-    if (localTimerInterval) return;
-    localTimerInterval = setInterval(() => {
-        if (isMappingPlaying) {
-            localRunSeconds += 1;
-            elRunTime.textContent = formatTime(localRunSeconds);
-        }
-        if (isTotalPlaying) {
-            localTotalSeconds += 1;
-            elTotalTime.textContent = formatTime(localTotalSeconds);
-        }
-    }, 1000);
-}
+}, 1000);
 
 // --- API polling ---
 
 async function fetchActiveRun() {
     try {
-        const res = await fetch(`${API_BASE}/runs/active`);
+        const res = await fetch(API_BASE + '/runs/active');
         if (res.status === 200) {
-            const data = await res.json();
-            if (data && data.total_value_fe != null) {
-                const val = data.total_value_fe;
-                elCurrentProfit.textContent = formatFE(val) + ' FE';
-                elCurrentProfit.classList.toggle('negative', val < 0);
-                lastData.currentProfit = val;
-            } else {
-                elCurrentProfit.textContent = '--';
-                elCurrentProfit.classList.remove('negative');
+            const d = await res.json();
+            if (d) {
+                const val = d.net_value_fe != null ? d.net_value_fe : (d.total_value || 0);
+                el.profit.textContent = formatFE(val);
+                el.profit.classList.toggle('negative', val < 0);
+                return;
             }
-        } else {
-            elCurrentProfit.textContent = '--';
-            elCurrentProfit.classList.remove('negative');
         }
-    } catch (e) {
-        // Keep last known value on error
-    }
+        el.profit.textContent = '--';
+        el.profit.classList.remove('negative');
+    } catch (e) {}
 }
 
 async function fetchTimeState() {
     try {
-        const res = await fetch(`${API_BASE}/time`);
+        const res = await fetch(API_BASE + '/time');
         if (res.status === 200) {
-            const data = await res.json();
-            // Sync local timers with server
-            localRunSeconds = data.current_map_play_seconds || 0;
-            localTotalSeconds = data.total_play_seconds || 0;
-            isMappingPlaying = data.mapping_play_state === 'playing';
-            isTotalPlaying = data.total_play_state === 'playing';
+            const d = await res.json();
+            localRunSec = d.current_map_play_seconds || 0;
+            localTotalSec = d.total_play_seconds || 0;
+            isMappingPlaying = d.mapping_play_state === 'playing';
+            isTotalPlaying = d.total_play_state === 'playing';
 
-            elRunTime.textContent = (data.mapping_play_state === 'stopped' && localRunSeconds === 0)
-                ? '--:--'
-                : formatTime(localRunSeconds);
-            elTotalTime.textContent = formatTime(localTotalSeconds);
+            el.runTime.textContent = (d.mapping_play_state === 'stopped' && localRunSec === 0)
+                ? '--:--' : formatTime(localRunSec);
+            el.totalTime.textContent = formatTime(localTotalSec);
+            el.contract.textContent = d.contract_setting || '--';
         }
-    } catch (e) {
-        // Keep last known value
-    }
+    } catch (e) {}
 }
 
 async function fetchPerformance() {
     try {
-        const res = await fetch(`${API_BASE}/runs/performance`);
+        const res = await fetch(API_BASE + '/runs/performance');
         if (res.status === 200) {
-            const data = await res.json();
-            const feHr = data.fe_per_hour_mapping || data.fe_per_hour_play || 0;
-            elFePerHour.textContent = formatFE(feHr);
-            lastData.fePerHour = feHr;
+            const d = await res.json();
+            el.mapHr.textContent = formatFE(d.profit_per_hour_mapping || 0);
+            el.totalHr.textContent = formatFE(d.profit_per_hour_total || 0);
+            el.totalProfit.textContent = formatFE(d.total_net_profit_fe || 0);
         }
-    } catch (e) {
-        // Keep last known value
-    }
+    } catch (e) {}
 }
 
 async function pollAll() {
-    await Promise.all([
-        fetchActiveRun(),
-        fetchTimeState(),
-        fetchPerformance(),
-    ]);
+    await Promise.all([fetchActiveRun(), fetchTimeState(), fetchPerformance()]);
 }
 
-// --- Settings ---
+// --- JS Drag ---
 
-function initSettings() {
-    // Restore opacity from localStorage
-    const savedOpacity = localStorage.getItem('overlay_opacity');
-    if (savedOpacity) {
-        const val = parseInt(savedOpacity);
-        elOpacitySlider.value = val;
-        elOpacityValue.textContent = val + '%';
-        applyOpacity(val);
+let isDragging = false;
+let dragStartX = 0, dragStartY = 0, winStartX = 0, winStartY = 0;
+
+el.dragHandle.addEventListener('mousedown', async function(e) {
+    e.preventDefault();
+    isDragging = true;
+    dragStartX = e.screenX;
+    dragStartY = e.screenY;
+
+    if (window.pywebview && window.pywebview.api) {
+        await window.pywebview.api.set_overlay_interactive(true);
+        const geo = await window.pywebview.api.get_overlay_geometry();
+        if (geo) {
+            winStartX = geo.x;
+            winStartY = geo.y;
+        }
+    }
+});
+
+document.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    const dx = e.screenX - dragStartX;
+    const dy = e.screenY - dragStartY;
+    if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.move_overlay(winStartX + dx, winStartY + dy);
+    }
+});
+
+document.addEventListener('mouseup', function() {
+    if (isDragging) {
+        isDragging = false;
+        if (el.settingsPopup.classList.contains('hidden')) {
+            if (window.pywebview && window.pywebview.api) {
+                window.pywebview.api.set_overlay_interactive(false);
+            }
+        }
+    }
+});
+
+// --- Settings popup ---
+
+let settingsOpen = false;
+
+el.settingsBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (settingsOpen) {
+        closeSettings();
+    } else {
+        openSettings();
+    }
+});
+
+function openSettings() {
+    settingsOpen = true;
+    el.settingsPopup.classList.remove('hidden');
+    if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.resize_overlay(null, BAR_HEIGHT + SETTINGS_POPUP_HEIGHT);
+        window.pywebview.api.set_overlay_interactive(true);
+    }
+}
+
+function closeSettings() {
+    settingsOpen = false;
+    el.settingsPopup.classList.add('hidden');
+    if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.resize_overlay(null, BAR_HEIGHT);
+        window.pywebview.api.set_overlay_interactive(false);
+    }
+}
+
+document.addEventListener('click', function(e) {
+    if (settingsOpen && !el.settingsPopup.contains(e.target) && e.target !== el.settingsBtn) {
+        closeSettings();
+    }
+});
+
+// --- Opacity slider ---
+(function() {
+    const saved = localStorage.getItem('overlay_opacity');
+    if (saved) {
+        el.opacitySlider.value = saved;
+        el.opacityVal.textContent = saved + '%';
     }
 
-    elSettingsBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        elSettingsPanel.classList.toggle('hidden');
-    });
-
-    elOpacitySlider.addEventListener('input', (e) => {
+    el.opacitySlider.addEventListener('input', function(e) {
         const val = parseInt(e.target.value);
-        elOpacityValue.textContent = val + '%';
+        el.opacityVal.textContent = val + '%';
         localStorage.setItem('overlay_opacity', val);
-        applyOpacity(val);
-    });
-
-    elCloseBtn.addEventListener('click', () => {
-        if (window.pywebview && window.pywebview.api && window.pywebview.api.close_overlay) {
-            window.pywebview.api.close_overlay();
-        } else {
-            window.close();
+        if (window.pywebview && window.pywebview.api) {
+            window.pywebview.api.set_overlay_opacity(val / 100);
         }
     });
+})();
 
-    // Click outside settings panel to close
-    document.addEventListener('click', (e) => {
-        if (!elSettingsPanel.contains(e.target) && e.target !== elSettingsBtn) {
-            elSettingsPanel.classList.add('hidden');
-        }
-    });
-}
-
-function applyOpacity(percent) {
-    const value = percent / 100;
-    // Try native Win32 API via pywebview
-    if (window.pywebview && window.pywebview.api && window.pywebview.api.set_overlay_opacity) {
-        window.pywebview.api.set_overlay_opacity(value);
+// --- Scale slider ---
+(function() {
+    const saved = localStorage.getItem('overlay_scale');
+    if (saved) {
+        el.scaleSlider.value = saved;
+        el.scaleVal.textContent = saved + '%';
     }
-    // Also set CSS opacity as visual feedback / fallback
-    document.getElementById('overlay-bar').style.opacity = value;
-    document.getElementById('settings-panel').style.opacity = Math.min(1, value + 0.1);
-}
+
+    el.scaleSlider.addEventListener('input', function(e) {
+        const val = parseInt(e.target.value);
+        el.scaleVal.textContent = val + '%';
+        localStorage.setItem('overlay_scale', val);
+        if (window.pywebview && window.pywebview.api) {
+            window.pywebview.api.set_overlay_scale(val / 100);
+        }
+    });
+})();
+
+// Apply saved settings on pywebview ready
+window.addEventListener('pywebviewready', function() {
+    const opacity = parseInt(el.opacitySlider.value);
+    if (opacity < 100 && window.pywebview && window.pywebview.api) {
+        window.pywebview.api.set_overlay_opacity(opacity / 100);
+    }
+    const scale = parseInt(el.scaleSlider.value);
+    if (scale !== 100 && window.pywebview && window.pywebview.api) {
+        window.pywebview.api.set_overlay_scale(scale / 100);
+    }
+});
 
 // --- Init ---
 
-function init() {
-    initSettings();
-    startLocalTimer();
-    pollAll();
-    setInterval(pollAll, POLL_INTERVAL);
-}
-
-// Wait for DOM then init
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-} else {
-    init();
-}
+pollAll();
+setInterval(pollAll, POLL_INTERVAL);

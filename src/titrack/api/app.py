@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from titrack.api.routes import cloud, icons, inventory, items, prices, runs, settings, stats, time, update
+from titrack.api.routes import cloud, icons, inventory, items, overlay, prices, runs, settings, stats, time, update
 from titrack.core.time_tracker import TimeTracker
 from titrack.api.schemas import PlayerResponse, StatusResponse
 from titrack.config.paths import get_static_dir
@@ -85,6 +85,7 @@ def create_app(
     app.include_router(cloud.router)
     app.include_router(update.router)
     app.include_router(time.router)
+    app.include_router(overlay.router)
 
     # Initialize update manager
     try:

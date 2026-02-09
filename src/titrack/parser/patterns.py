@@ -91,5 +91,12 @@ HUB_ZONE_PATTERNS = [
     re.compile(r"LoginScene", re.IGNORECASE),  # Login screen
 ]
 
+# Contract setting change notification
+# Example: GameLog: Display: [Game] MsgMgr@:Show MsgValue = 계약 설정이 설정11(으)로 변경되었습니다.
+CONTRACT_SETTING_PATTERN = re.compile(
+    r"GameLog:\s*Display:\s*\[Game\]\s*MsgMgr@:Show\s+MsgValue\s*=\s*"
+    r"계약 설정이\s+(?P<contract_name>.+?)\(으\)로 변경되었습니다\."
+)
+
 # Flame Elementium ConfigBaseId (primary currency)
 FE_CONFIG_BASE_ID = 100300

@@ -1,16 +1,8 @@
-/* TITrack Overlay Styles */
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    margin: 0;
-    padding: 0;
-    background: transparent;
-    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+html, body {
+    background: #12121e;
+    font-family: 'Segoe UI', -apple-system, sans-serif;
     overflow: hidden;
     user-select: none;
 }
@@ -18,117 +10,140 @@ body {
 .overlay-bar {
     display: flex;
     align-items: center;
-    background: rgba(18, 18, 30, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: 6px 12px;
-    cursor: move;
-    position: relative;
+    background: rgba(18, 18, 30, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    height: 30px;
+}
+
+.drag-handle {
+    width: 24px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.2);
+    font-size: 12px;
+    cursor: grab;
+    flex-shrink: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.drag-handle:hover {
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.drag-handle:active {
+    cursor: grabbing;
 }
 
 .stats-row {
     display: flex;
     align-items: center;
-    gap: 0;
     flex: 1;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+    height: 100%;
 }
 
-.stat-item {
+/* Fixed-width column layout */
+.stat {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    padding: 0 10px;
-    min-width: 70px;
+    justify-content: center;
+    gap: 3px;
+    padding: 0 4px;
+    white-space: nowrap;
+    height: 100%;
 }
 
-.stat-label {
+.col-profit { width: 110px; }
+.col-time   { width: 80px; }
+.col-rate   { width: 80px; }
+.col-contract { width: 60px; }
+
+.sl {
     font-size: 9px;
-    color: rgba(255, 255, 255, 0.45);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    line-height: 1;
-    margin-bottom: 2px;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    color: rgba(255, 255, 255, 0.4);
+    letter-spacing: 0.3px;
 }
 
-.stat-value {
-    font-size: 14px;
+.sv {
+    font-size: 12px;
     font-weight: 700;
     color: #e0e0e0;
-    line-height: 1.2;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-    white-space: nowrap;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    min-width: 36px;
+    text-align: right;
 }
 
-.stat-value.profit {
-    color: #4ecca3;
+.su {
+    font-size: 8px;
+    color: rgba(255, 255, 255, 0.25);
+    margin-left: 1px;
 }
 
-.stat-value.profit.negative {
-    color: #e74c3c;
-}
+.sv.profit { color: #4ecca3; }
+.sv.profit.negative { color: #e74c3c; }
+.sv.accent { color: #ffd700; }
+.sv.accent-dim { color: #b8960e; }
+.sv.contract { color: #5dade2; font-size: 11px; min-width: unset; text-align: center; }
 
-.stat-value.accent {
-    color: #ffd700;
-}
-
-.stat-divider {
+.divider {
     width: 1px;
-    height: 24px;
-    background: rgba(255, 255, 255, 0.12);
+    height: 14px;
+    background: rgba(255, 255, 255, 0.08);
     flex-shrink: 0;
 }
 
-/* Settings button */
 .settings-btn {
+    width: 24px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
-    color: rgba(255, 255, 255, 0.35);
-    font-size: 14px;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 12px;
     cursor: pointer;
-    padding: 2px 4px;
-    margin-left: 4px;
-    border-radius: 4px;
-    transition: color 0.2s, background 0.2s;
-    line-height: 1;
-    -webkit-app-region: no-drag;
+    flex-shrink: 0;
 }
 
 .settings-btn:hover {
-    color: rgba(255, 255, 255, 0.8);
-    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.06);
 }
 
-/* Settings panel */
-.settings-panel {
-    background: rgba(18, 18, 30, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+/* Settings popup */
+.settings-popup {
+    background: rgba(18, 18, 30, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-top: none;
-    border-radius: 0 0 8px 8px;
-    padding: 8px 12px;
-    margin-top: -1px;
+    padding: 4px 10px;
 }
 
-.settings-panel.hidden {
-    display: none;
-}
+.settings-popup.hidden { display: none; }
 
-.setting-row {
+.popup-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 0;
+    height: 22px;
 }
 
-.setting-label {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.6);
-    min-width: 55px;
+.popup-label {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+    min-width: 40px;
 }
 
-.opacity-slider {
+.popup-slider {
     flex: 1;
-    height: 4px;
+    height: 3px;
     -webkit-appearance: none;
     appearance: none;
     background: rgba(255, 255, 255, 0.15);
@@ -137,9 +152,8 @@ body {
     cursor: pointer;
 }
 
-.opacity-slider::-webkit-slider-thumb {
+.popup-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
-    appearance: none;
     width: 12px;
     height: 12px;
     border-radius: 50%;
@@ -147,25 +161,9 @@ body {
     cursor: pointer;
 }
 
-.opacity-value {
-    font-size: 11px;
+.popup-val {
+    font-size: 10px;
     color: rgba(255, 255, 255, 0.5);
-    min-width: 30px;
+    min-width: 28px;
     text-align: right;
-}
-
-.close-overlay-btn {
-    background: rgba(231, 76, 60, 0.2);
-    border: 1px solid rgba(231, 76, 60, 0.4);
-    color: #e74c3c;
-    font-size: 11px;
-    padding: 4px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.2s;
-    width: 100%;
-}
-
-.close-overlay-btn:hover {
-    background: rgba(231, 76, 60, 0.4);
 }

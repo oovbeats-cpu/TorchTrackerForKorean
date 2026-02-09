@@ -4,45 +4,40 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TITrack Overlay</title>
-    <link rel="stylesheet" href="/static/overlay.css">
+    <link rel="stylesheet" href="/overlay.css">
 </head>
 <body>
-    <div class="overlay-bar pywebview-drag-region" id="overlay-bar">
+    <div class="overlay-bar" id="overlay-bar">
         <div class="stats-row">
-            <div class="stat-item">
-                <span class="stat-label">현재 수익</span>
-                <span class="stat-value profit" id="current-profit">--</span>
-            </div>
-            <div class="stat-divider"></div>
-            <div class="stat-item">
-                <span class="stat-label">런 시간</span>
-                <span class="stat-value" id="run-time">--:--</span>
-            </div>
-            <div class="stat-divider"></div>
-            <div class="stat-item">
-                <span class="stat-label">총 시간</span>
-                <span class="stat-value" id="total-time">00:00</span>
-            </div>
-            <div class="stat-divider"></div>
-            <div class="stat-item">
-                <span class="stat-label">FE/시간</span>
-                <span class="stat-value accent" id="fe-per-hour">0</span>
-            </div>
+            <div class="stat col-profit"><span class="sl">수익</span><span class="sv profit" id="s-profit">--</span><span class="su">결정</span></div>
+            <div class="divider"></div>
+            <div class="stat col-time"><span class="sl">시간</span><span class="sv" id="s-run-time">--:--</span></div>
+            <div class="divider"></div>
+            <div class="stat col-profit"><span class="sl">누적</span><span class="sv" id="s-total-profit">--</span><span class="su">결정</span></div>
+            <div class="divider"></div>
+            <div class="stat col-time"><span class="sl">총 시간</span><span class="sv" id="s-total-time">00:00</span></div>
+            <div class="divider"></div>
+            <div class="stat col-rate"><span class="sl">맵핑/h</span><span class="sv accent" id="s-map-hr">0</span></div>
+            <div class="divider"></div>
+            <div class="stat col-rate"><span class="sl">총/h</span><span class="sv accent-dim" id="s-total-hr">0</span></div>
+            <div class="divider"></div>
+            <div class="stat col-contract"><span class="sl">계약</span><span class="sv contract" id="s-contract">--</span></div>
         </div>
-        <button class="settings-btn" id="settings-btn" title="설정">⚙</button>
+        <button class="settings-btn" id="settings-btn" title="설정">&#9881;</button>
+        <div class="drag-handle" id="drag-handle">&#8942;</div>
     </div>
-
-    <div class="settings-panel hidden" id="settings-panel">
-        <div class="setting-row">
-            <span class="setting-label">불투명도</span>
-            <input type="range" id="opacity-slider" min="20" max="100" value="90" class="opacity-slider">
-            <span class="opacity-value" id="opacity-value">90%</span>
+    <div class="settings-popup hidden" id="settings-popup">
+        <div class="popup-row">
+            <span class="popup-label">불투명도</span>
+            <input type="range" id="opacity-slider" min="20" max="100" value="90" class="popup-slider">
+            <span class="popup-val" id="opacity-val">90%</span>
         </div>
-        <div class="setting-row">
-            <button class="close-overlay-btn" id="close-btn">오버레이 닫기</button>
+        <div class="popup-row">
+            <span class="popup-label">크기</span>
+            <input type="range" id="scale-slider" min="80" max="150" value="100" class="popup-slider">
+            <span class="popup-val" id="scale-val">100%</span>
         </div>
     </div>
-
-    <script src="/static/overlay.js"></script>
+    <script src="/overlay.js"></script>
 </body>
 </html>

@@ -45,7 +45,6 @@ body.has-titlebar #app-scroll-container {
 .titlebar-buttons {
     display: flex;
     height: 100%;
-    -webkit-app-region: no-drag;
 }
 
 .titlebar-btn {
@@ -56,7 +55,6 @@ body.has-titlebar #app-scroll-container {
     color: var(--text-primary);
     cursor: pointer;
     transition: background-color 0.15s;
-    -webkit-app-region: no-drag;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -79,6 +77,27 @@ body.has-titlebar #app-scroll-container {
 
 .titlebar-btn.minimize-btn:hover {
     background: rgba(255, 255, 255, 0.15);
+}
+
+.titlebar-btn.overlay-btn {
+    width: auto;
+    padding: 0 10px;
+    font-size: 0.75rem;
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.titlebar-btn.overlay-btn:hover {
+    background: rgba(255, 215, 0, 0.1);
+}
+
+.titlebar-btn.overlay-btn.active {
+    color: var(--accent);
+}
+
+.titlebar-btn.overlay-btn:not(.active) {
+    color: var(--text-secondary);
+    opacity: 0.6;
 }
 
 /* Body offset when titlebar is visible - handled by #app-scroll-container now */
@@ -313,6 +332,44 @@ h6,
     margin-left: 4px;
 }
 
+.overlay-control {
+    margin-left: 4px;
+}
+
+.overlay-opacity-control {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 4px;
+}
+
+.mini-slider {
+    width: 60px;
+    height: 3px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.mini-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #4ecca3;
+    cursor: pointer;
+}
+
+.opacity-label {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+    min-width: 24px;
+}
+
 .control-btn {
     background: transparent;
     border: 1px solid var(--border);
@@ -330,6 +387,95 @@ h6,
     background: var(--bg-card);
     color: var(--text-primary);
     border-color: var(--text-secondary);
+}
+
+/* Toggle button style (active/inactive states) */
+.toggle-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: inherit;
+    transition: all 0.2s;
+    white-space: nowrap;
+    opacity: 0.6;
+}
+
+.toggle-btn:hover {
+    opacity: 0.8;
+    border-color: var(--text-secondary);
+}
+
+.toggle-btn.active {
+    background: rgba(78, 204, 163, 0.15);
+    border-color: var(--positive);
+    color: var(--positive);
+    opacity: 1;
+}
+
+.toggle-btn.active:hover {
+    background: rgba(78, 204, 163, 0.25);
+}
+
+/* Overlay slider controls */
+.overlay-slider-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.slider-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    cursor: default;
+}
+
+.mini-slider {
+    width: 60px;
+    height: 3px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.mini-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #4ecca3;
+    cursor: pointer;
+}
+
+.slider-val {
+    font-size: 10px;
+    color: var(--text-muted);
+    min-width: 28px;
+    text-align: right;
+}
+
+/* Control bar layout */
+.control-group-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.control-spacer {
+    flex: 1;
+}
+
+.control-group-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 header {
@@ -3031,4 +3177,106 @@ tr.nightmare .zone-name {
 
 .export-btn:hover {
     opacity: 0.9;
+}
+
+/* Contract setting badge */
+.contract-badge {
+    display: inline-block;
+    background: rgba(93, 173, 226, 0.15);
+    border: 1px solid rgba(93, 173, 226, 0.3);
+    color: #5dade2;
+    font-size: 0.7em;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+.contract-badge.hidden {
+    display: none;
+}
+
+
+/* ── Overlay Settings in Modal ──────────────────────────── */
+.overlay-settings-sliders {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.overlay-setting-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.overlay-setting-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    min-width: 60px;
+}
+
+.settings-slider {
+    flex: 1;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.settings-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #4ecca3;
+    cursor: pointer;
+}
+
+.overlay-setting-value {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    min-width: 36px;
+    text-align: right;
+}
+
+.overlay-columns-section {
+    margin-top: 12px;
+}
+
+.overlay-column-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.overlay-col-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.overlay-col-toggle input {
+    display: none;
+}
+
+.overlay-col-toggle:has(input:checked) {
+    background: rgba(78, 204, 163, 0.15);
+    border-color: var(--positive);
+    color: var(--positive);
 }

@@ -2,6 +2,7 @@
 
 from titrack.core.models import (
     ParsedBagEvent,
+    ParsedContractSettingEvent,
     ParsedContextMarker,
     ParsedEvent,
     ParsedLevelEvent,
@@ -12,6 +13,7 @@ from titrack.core.models import (
 from titrack.parser.patterns import (
     BAG_MODIFY_PATTERN,
     BAG_INIT_PATTERN,
+    CONTRACT_SETTING_PATTERN,
     ITEM_CHANGE_PATTERN,
     LEVEL_EVENT_PATTERN,
     LEVEL_ID_PATTERN,
@@ -105,6 +107,14 @@ def parse_line(line: str) -> ParsedEvent:
         return ParsedViewEvent(
             view_id=match.group("view_id"),
             view_name=match.group("view_name"),
+            raw_line=line,
+        )
+
+    # Try contract setting change
+    match = CONTRACT_SETTING_PATTERN.search(line)
+    if match:
+        return ParsedContractSettingEvent(
+            contract_name=match.group("contract_name"),
             raw_line=line,
         )
 

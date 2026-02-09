@@ -13,6 +13,7 @@ from titrack.core.models import (
     EventContext,
     ItemDelta,
     ParsedBagEvent,
+    ParsedContractSettingEvent,
     ParsedContextMarker,
     ParsedLevelEvent,
     ParsedLevelIdEvent,
@@ -120,6 +121,9 @@ class Collector:
         # Map cost tracking: buffer costs until run starts
         self._pending_map_costs: list[ItemDelta] = []
 
+        # Contract setting tracking (in-memory only, from log messages)
+        self._current_contract_setting: Optional[str] = None
+
         # InitBagData batch tracking: page_id -> last init timestamp
         # Used to detect new init batches and clear stale slot states
         self._last_init_page: Optional[int] = None
@@ -136,6 +140,11 @@ class Collector:
             sync_manager: SyncManager instance or None to disable
         """
         self._sync_manager = sync_manager
+
+    @property
+    def current_contract_setting(self) -> Optional[str]:
+        """Get the current contract setting name."""
+        return self._current_contract_setting
 
     def initialize(self) -> None:
         """
@@ -310,6 +319,8 @@ class Collector:
             self._handle_level_event(event, timestamp)
         elif isinstance(event, ParsedPlayerDataEvent):
             self._handle_player_data_event(event, timestamp)
+        elif isinstance(event, ParsedContractSettingEvent):
+            self._handle_contract_setting_event(event)
         elif isinstance(event, ParsedViewEvent):
             self._handle_view_event(event)
 
@@ -529,6 +540,11 @@ class Collector:
             self._time_tracker.on_surgery_complete()
         elif event.view_name == RESUME_VIEW_NAME and self._time_tracker.is_in_surgery_prep:
             self._time_tracker.on_surgery_interrupted()
+
+    def _handle_contract_setting_event(self, event: ParsedContractSettingEvent) -> None:
+        """Handle contract setting change events."""
+        self._current_contract_setting = event.contract_name
+        logger.info(f"Contract setting changed to: {event.contract_name}")
 
     def _cleanup_stale_pending_searches(self, current_time: datetime) -> None:
         """Remove pending price searches older than TTL."""

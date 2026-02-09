@@ -3,6 +3,7 @@
 import argparse
 import json
 import signal
+import subprocess
 import sys
 import threading
 import webbrowser
@@ -589,6 +590,8 @@ def _serve_browser_mode(args: argparse.Namespace, settings: Settings,
 def _serve_with_window(args: argparse.Namespace, settings: Settings,
                        logger) -> int:
     """Run server with native window using pywebview."""
+    from titrack.config.paths import is_frozen
+
     # Test pywebview/pythonnet availability early, before starting any resources
     try:
         import webview
@@ -624,6 +627,7 @@ def _serve_with_window(args: argparse.Namespace, settings: Settings,
     sync_manager = None
     api_db = None
     server_thread = None
+    overlay_process = None
     shutdown_event = threading.Event()
     time_tracker = TimeTracker()
 
@@ -632,6 +636,15 @@ def _serve_with_window(args: argparse.Namespace, settings: Settings,
         logger.info("Cleaning up resources...")
         shutdown_event.set()
 
+        if overlay_process:
+            try:
+                overlay_process.terminate()
+                overlay_process.wait(timeout=3)
+            except Exception:
+                try:
+                    overlay_process.kill()
+                except Exception:
+                    pass
         if sync_manager:
             try:
                 sync_manager.stop_background_sync()
@@ -778,6 +791,8 @@ def _serve_with_window(args: argparse.Namespace, settings: Settings,
         class Api:
             def __init__(self):
                 self._window = None
+                self._api_host = host
+                self._api_port = port
 
             def set_window(self, window):
                 self._window = window
@@ -799,11 +814,6 @@ def _serve_with_window(args: argparse.Namespace, settings: Settings,
                     if result and len(result) > 0:
                         return result[0]
                 return None
-
-            def start_resize(self, edge):
-                # Resize is handled by pywebview's built-in resize functionality
-                # For frameless windows, we use the resize handles in CSS
-                pass
 
             def get_window_geometry(self):
                 if self._window:
@@ -831,49 +841,137 @@ def _serve_with_window(args: argparse.Namespace, settings: Settings,
                 return False
 
             def set_overlay_opacity(self, value):
-                """Set overlay window opacity using Win32 API."""
-                try:
-                    import ctypes
-                    hwnd = ctypes.windll.user32.FindWindowW(None, "TITrack Overlay")
-                    if hwnd:
-                        GWL_EXSTYLE = -20
-                        WS_EX_LAYERED = 0x00080000
-                        LWA_ALPHA = 0x02
-                        ex_style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-                        ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED)
-                        alpha = int(max(0.1, min(1.0, float(value))) * 255)
-                        ctypes.windll.user32.SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA)
-                        return True
-                except Exception:
-                    pass
-                return False
+                """Set overlay opacity via HTTP API (overlay runs as subprocess)."""
+                return self._overlay_config_update({"opacity": float(value)})
 
-            def close_overlay(self):
-                """Close the overlay window."""
-                if hasattr(self, '_overlay') and self._overlay:
-                    try:
-                        self._overlay.destroy()
-                        self._overlay = None
-                    except Exception:
-                        pass
+            def set_overlay_scale(self, scale):
+                """Set overlay scale via HTTP API."""
+                return self._overlay_config_update({"scale": float(scale)})
 
             def toggle_overlay(self):
-                """Toggle overlay visibility. Returns new visibility state."""
-                if hasattr(self, '_overlay') and self._overlay:
-                    try:
-                        if self._overlay.hidden:
-                            self._overlay.show()
-                            return True
-                        else:
-                            self._overlay.hide()
-                            return False
-                    except Exception:
-                        pass
-                return False
+                """Toggle overlay visibility via HTTP API."""
+                try:
+                    url = f"http://{self._api_host}:{self._api_port}/api/overlay/config"
+                    req = urllib.request.Request(url)
+                    with urllib.request.urlopen(req, timeout=1) as resp:
+                        config = json.loads(resp.read().decode("utf-8"))
+                    new_visible = not config.get("visible", True)
+                    self._overlay_config_update({"visible": new_visible})
+                    return new_visible
+                except Exception:
+                    return False
+
+            def _overlay_config_update(self, updates):
+                """Send overlay config update to HTTP API."""
+                try:
+                    url = f"http://{self._api_host}:{self._api_port}/api/overlay/config"
+                    data = json.dumps(updates).encode("utf-8")
+                    req = urllib.request.Request(url, data=data, method="POST")
+                    req.add_header("Content-Type", "application/json")
+                    with urllib.request.urlopen(req, timeout=1) as resp:
+                        return resp.status == 200
+                except Exception:
+                    return False
+
+            def set_overlay_lock(self, locked):
+                """Set overlay lock state via HTTP API."""
+                return self._overlay_config_update({"locked": bool(locked)})
+
+            def set_overlay_columns(self, columns):
+                """Set visible overlay columns via HTTP API."""
+                return self._overlay_config_update({"visible_columns": list(columns)})
+
+            def set_overlay_text_shadow(self, enabled):
+                """Set overlay text shadow via HTTP API."""
+                return self._overlay_config_update({"text_shadow": bool(enabled)})
+
 
         api = Api()
 
-        # Create pywebview window
+        # Launch overlay as a SEPARATE PROCESS.
+        # WPF overlay (TITrackOverlay.exe) is preferred for clean transparency.
+        # Falls back to Python/GDI overlay if WPF exe is not available.
+        # Uses Windows Job Object so overlay auto-terminates if main app crashes.
+        job_handle = None
+        try:
+            # Look for WPF overlay executable
+            wpf_overlay = None
+
+            if is_frozen():
+                # Frozen mode: PyInstaller bundles overlay in _internal/overlay/
+                meipass = getattr(sys, '_MEIPASS', None)
+                if meipass:
+                    wpf_overlay = Path(meipass) / "overlay" / "TITrackOverlay.exe"
+                else:
+                    wpf_overlay = Path(sys.executable).parent / "_internal" / "overlay" / "TITrackOverlay.exe"
+            else:
+                # Dev mode: check overlay/publish directory relative to project root
+                wpf_overlay = Path(__file__).resolve().parent.parent.parent.parent / "overlay" / "publish" / "TITrackOverlay.exe"
+
+            if wpf_overlay and wpf_overlay.exists():
+                overlay_cmd = [str(wpf_overlay), "--host", host, "--port", str(port)]
+                logger.info(f"Using WPF overlay: {wpf_overlay}")
+            elif is_frozen():
+                overlay_cmd = [sys.executable, "--overlay",
+                               "--host", host, "--port", str(port)]
+                logger.info("WPF overlay not found, using GDI fallback")
+            else:
+                overlay_cmd = [sys.executable, "-m", "titrack", "--overlay",
+                               "--host", host, "--port", str(port)]
+                logger.info("WPF overlay not found, using GDI fallback")
+
+            overlay_process = subprocess.Popen(
+                overlay_cmd,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            logger.info(f"Overlay subprocess started (PID: {overlay_process.pid})")
+
+            # Assign overlay to a Windows Job Object so it dies with the parent
+            try:
+                import ctypes
+                import ctypes.wintypes as wt
+                kernel32 = ctypes.windll.kernel32
+                job_handle = kernel32.CreateJobObjectW(None, None)
+                if job_handle:
+                    # JOBOBJECT_EXTENDED_LIMIT_INFORMATION with KILL_ON_JOB_CLOSE
+                    class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+                        _fields_ = [
+                            ("PerProcessUserTimeLimit", ctypes.c_int64),
+                            ("PerJobUserTimeLimit", ctypes.c_int64),
+                            ("LimitFlags", wt.DWORD),
+                            ("MinimumWorkingSetSize", ctypes.c_size_t),
+                            ("MaximumWorkingSetSize", ctypes.c_size_t),
+                            ("ActiveProcessLimit", wt.DWORD),
+                            ("Affinity", ctypes.c_size_t),
+                            ("PriorityClass", wt.DWORD),
+                            ("SchedulingClass", wt.DWORD),
+                        ]
+                    class IO_COUNTERS(ctypes.Structure):
+                        _fields_ = [("v", ctypes.c_uint64 * 6)]
+                    class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+                        _fields_ = [
+                            ("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
+                            ("IoInfo", IO_COUNTERS),
+                            ("ProcessMemoryLimit", ctypes.c_size_t),
+                            ("JobMemoryLimit", ctypes.c_size_t),
+                            ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                            ("PeakJobMemoryUsed", ctypes.c_size_t),
+                        ]
+                    info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+                    info.BasicLimitInformation.LimitFlags = 0x2000  # KILL_ON_JOB_CLOSE
+                    kernel32.SetInformationJobObject(
+                        job_handle, 9,  # JobObjectExtendedLimitInformation
+                        ctypes.byref(info), ctypes.sizeof(info))
+                    kernel32.AssignProcessToJobObject(
+                        job_handle, int(overlay_process._handle))
+                    logger.info("Overlay assigned to job object (auto-kill on exit)")
+            except Exception as e:
+                logger.debug(f"Job object setup skipped: {e}")
+        except Exception as e:
+            logger.warning(f"Could not start overlay subprocess: {e}")
+            overlay_process = None
+
+        # Create pywebview window (single window only - no second window!)
         window = webview.create_window(
             title="토치라이트 결정 트래커",
             url=f"http://{host}:{port}",
@@ -882,32 +980,10 @@ def _serve_with_window(args: argparse.Namespace, settings: Settings,
             min_size=(580, 400),
             resizable=True,
             frameless=True,
-            easy_drag=True,
+            easy_drag=False,
             js_api=api,
         )
         api.set_window(window)
-
-        # Create overlay window (optional - failure doesn't affect main app)
-        overlay_window = None
-        try:
-            overlay_window = webview.create_window(
-                'TITrack Overlay',
-                url=f"http://{host}:{port}/static/overlay.html",
-                width=420,
-                height=55,
-                frameless=True,
-                on_top=True,
-                easy_drag=True,
-                transparent=True,
-                resizable=False,
-                shadow=False,
-                js_api=api,
-            )
-            api._overlay = overlay_window
-            logger.info("Overlay window created")
-        except Exception as e:
-            logger.warning(f"Could not create overlay window: {e}")
-            overlay_window = None
 
         # Start webview (blocks until window is closed)
         webview.start()

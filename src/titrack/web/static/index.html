@@ -12,8 +12,11 @@
     <body>
         <!-- Custom Window Titlebar (frameless mode) -->
         <div id="custom-titlebar" class="custom-titlebar hidden">
-            <div class="titlebar-drag-region"></div>
+            <div class="titlebar-drag-region pywebview-drag-region"></div>
             <div class="titlebar-buttons">
+                <button class="titlebar-btn overlay-btn" id="overlay-toggle-btn" title="오버레이" style="display: none;">
+                    오버레이
+                </button>
                 <button class="titlebar-btn minimize-btn" onclick="minimizeWindow()" title="최소화">
                     <img src="assets/minimize.ico" alt="−" class="titlebar-icon">
                 </button>
@@ -39,42 +42,40 @@
         <div class="container">
             <!-- Top Control Bar -->
             <div class="top-control-bar">
-                <div class="control-group">
-                    <label class="toggle-mini cloud-toggle">
-                        <input type="checkbox" id="cloud-sync-toggle" />
-                        <span>클라우드 동기화</span>
-                    </label>
-                    <span
-                        id="cloud-sync-status"
-                        class="cloud-status-indicator"
-                        title="클라우드 동기화 상태"
-                    ></span>
+                <!-- LEFT: Toggle buttons -->
+                <div class="control-group-left">
+                    <div class="control-group">
+                        <label class="toggle-mini cloud-toggle">
+                            <input type="checkbox" id="cloud-sync-checkbox" />
+                            <span>클라우드 동기화</span>
+                        </label>
+                        <span id="cloud-sync-status" class="cloud-status-indicator" title="클라우드 동기화 상태"></span>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="toggle-mini">
+                            <input type="checkbox" id="auto-refresh-checkbox" checked />
+                            <span>자동 새로고침</span>
+                        </label>
+                        <span id="status-indicator" class="status-dot"></span>
+                    </div>
+
+                    <div class="control-group" id="always-on-top-group" style="display: none;">
+                        <label class="toggle-mini">
+                            <input type="checkbox" id="always-on-top-checkbox" />
+                            <span>항상 위</span>
+                        </label>
+                    </div>
                 </div>
-                <button
-                    class="control-btn"
-                    onclick="openSettingsModal()"
-                    title="설정"
-                >
-                    &#9881;
-                </button>
-                <button class="control-btn" onclick="openHelpModal()">
-                    사용 방법
-                </button>
-                <button class="control-btn" onclick="resetStats()">
-                    통계 초기화
-                </button>
-                <div class="control-group">
-                    <label class="toggle-mini">
-                        <input type="checkbox" id="auto-refresh" checked />
-                        <span>자동 새로고침</span>
-                    </label>
-                    <span id="status-indicator" class="status-dot"></span>
-                </div>
-                <div class="control-group on-top-control" id="on-top-control" style="display: none;">
-                    <label class="toggle-mini">
-                        <input type="checkbox" id="always-on-top" />
-                        <span>항상 위</span>
-                    </label>
+
+                <!-- Spacer pushes right group to the end -->
+                <div class="control-spacer"></div>
+
+                <!-- RIGHT: Action buttons -->
+                <div class="control-group-right">
+                    <button class="control-btn" onclick="openSettingsModal()" title="설정">&#9881;</button>
+                    <button class="control-btn" onclick="openHelpModal()">사용 방법</button>
+                    <button class="control-btn" onclick="resetStats()">통계 초기화</button>
                 </div>
             </div>
 
@@ -183,8 +184,6 @@
                     </div>
                 </div>
                 <div class="header-divider"></div>
-
-                <div id="player-info" class="player-info hidden">
             </header>
 
             <main>
@@ -201,6 +200,7 @@
                                 class="active-run-duration"
                                 >--</span
                             >
+                            <span id="active-run-contract" class="contract-badge hidden"></span>
                         </h2>
                         <div class="active-run-stats">
                             <span class="active-run-value"
@@ -739,6 +739,42 @@
                             </div>
                         </div>
                         <span class="toggle-desc">데이터 새로고침 간격 (1초 ~ 5초)</span>
+                    </section>
+
+                    <!-- Overlay Settings Section (pywebview only) -->
+                    <section class="settings-section" id="overlay-settings-section" style="display: none;">
+                        <h4>오버레이 설정</h4>
+                        <div class="overlay-settings-sliders">
+                            <div class="overlay-setting-row">
+                                <span class="overlay-setting-label">배경 투명도</span>
+                                <input type="range" id="settings-overlay-opacity" min="0" max="100" value="70" class="settings-slider" />
+                                <span class="overlay-setting-value" id="settings-overlay-opacity-val">70%</span>
+                            </div>
+                            <div class="overlay-setting-row">
+                                <span class="overlay-setting-label">크기</span>
+                                <input type="range" id="settings-overlay-scale" min="80" max="150" value="100" class="settings-slider" />
+                                <span class="overlay-setting-value" id="settings-overlay-scale-val">100%</span>
+                            </div>
+                        </div>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="settings-overlay-text-shadow" checked />
+                            <div class="toggle-info">
+                                <span class="toggle-label">텍스트 그림자</span>
+                                <span class="toggle-desc">오버레이 텍스트에 그림자 효과 적용</span>
+                            </div>
+                        </label>
+                        <div class="overlay-columns-section">
+                            <span class="overlay-setting-label">표시할 항목</span>
+                            <div class="overlay-column-toggles">
+                                <label class="overlay-col-toggle"><input type="checkbox" value="profit" checked /><span>수익</span></label>
+                                <label class="overlay-col-toggle"><input type="checkbox" value="run_time" checked /><span>시간</span></label>
+                                <label class="overlay-col-toggle"><input type="checkbox" value="total_profit" checked /><span>누적</span></label>
+                                <label class="overlay-col-toggle"><input type="checkbox" value="total_time" checked /><span>총시간</span></label>
+                                <label class="overlay-col-toggle"><input type="checkbox" value="map_hr" checked /><span>맵핑/h</span></label>
+                                <label class="overlay-col-toggle"><input type="checkbox" value="total_hr" checked /><span>총/h</span></label>
+                                <label class="overlay-col-toggle"><input type="checkbox" value="contract" checked /><span>계약</span></label>
+                            </div>
+                        </div>
                     </section>
 
                     <!-- Settings Action Buttons -->

@@ -13,7 +13,7 @@ function showCustomTitlebar() {
         titlebar.classList.remove('hidden');
         document.body.classList.add('has-titlebar');
     }
-    
+
     // Show resize handles
     const resizeHandles = document.getElementById('resize-handles');
     if (resizeHandles) {
@@ -105,9 +105,12 @@ function initFramelessMode() {
     // Listen for pywebview ready event (more reliable)
     window.addEventListener('pywebviewready', function() {
         showCustomTitlebar();
-        // Show always-on-top control in native window mode
-        const onTopControl = document.getElementById('on-top-control');
-        if (onTopControl) onTopControl.style.display = '';
+        // Show always-on-top toggle in native window mode
+        const onTopToggle = document.getElementById('always-on-top-group');
+        if (onTopToggle) onTopToggle.style.display = '';
+        // Show overlay button in native window mode
+        const overlayBtn = document.getElementById('overlay-toggle-btn');
+        if (overlayBtn) overlayBtn.style.display = '';
     });
 }
 
@@ -855,6 +858,17 @@ async function syncTimeState() {
             timeState.pause_settings = state.pause_settings;
         }
         updateTimeDisplay();
+
+        // Update contract badge in active run panel
+        const contractBadge = document.getElementById('active-run-contract');
+        if (contractBadge) {
+            if (state.contract_setting) {
+                contractBadge.textContent = '계약: ' + state.contract_setting;
+                contractBadge.classList.remove('hidden');
+            } else {
+                contractBadge.classList.add('hidden');
+            }
+        }
     }
 }
 
@@ -887,30 +901,92 @@ function initTimeTracking() {
 }
 
 function initAlwaysOnTop() {
-    const control = document.getElementById('on-top-control');
-    const checkbox = document.getElementById('always-on-top');
+    const toggle = document.getElementById('always-on-top-group');
+    const checkbox = document.getElementById('always-on-top-checkbox');
+    if (!toggle || !checkbox) return;
 
     // Only show in native window mode (pywebview)
     if (typeof window.pywebview !== 'undefined' && window.pywebview.api) {
-        control.style.display = '';
+        toggle.style.display = '';
     }
 
-    if (checkbox) {
-        // Load saved state
-        const saved = localStorage.getItem('alwaysOnTop');
-        if (saved === 'true') {
-            checkbox.checked = true;
-            if (window.pywebview && window.pywebview.api) {
-                window.pywebview.api.toggle_on_top(true);
-            }
+    // Load saved state
+    const saved = localStorage.getItem('alwaysOnTop');
+    if (saved === 'true') {
+        checkbox.checked = true;
+        if (window.pywebview && window.pywebview.api) {
+            window.pywebview.api.toggle_on_top(true);
         }
+    }
 
-        checkbox.addEventListener('change', async (e) => {
-            const enabled = e.target.checked;
-            if (window.pywebview && window.pywebview.api) {
-                await window.pywebview.api.toggle_on_top(enabled);
+    checkbox.addEventListener('change', async function() {
+        if (window.pywebview && window.pywebview.api) {
+            await window.pywebview.api.toggle_on_top(checkbox.checked);
+        }
+        localStorage.setItem('alwaysOnTop', checkbox.checked.toString());
+    });
+}
+
+function initOverlayToggle() {
+    const btn = document.getElementById('overlay-toggle-btn');
+    if (!btn) return;
+
+    function showOverlayUI() {
+        btn.style.display = '';
+        const overlaySection = document.getElementById('overlay-settings-section');
+        if (overlaySection) overlaySection.style.display = '';
+    }
+
+    // Check immediately
+    if (typeof window.pywebview !== 'undefined' && window.pywebview.api) {
+        showOverlayUI();
+    } else {
+        // Retry after pywebview might be ready
+        window.addEventListener('pywebviewready', showOverlayUI);
+        // Also retry with timeout as fallback
+        setTimeout(() => {
+            if (typeof window.pywebview !== 'undefined' && window.pywebview.api) {
+                showOverlayUI();
             }
-            localStorage.setItem('alwaysOnTop', enabled.toString());
+        }, 1000);
+    }
+
+    // Restore saved state
+    const saved = localStorage.getItem('overlay_enabled');
+    if (saved === 'false') {
+        btn.classList.remove('active');
+        if (window.pywebview && window.pywebview.api) {
+            window.pywebview.api.toggle_overlay();
+        }
+    }
+
+    btn.addEventListener('click', async function() {
+        if (window.pywebview && window.pywebview.api) {
+            await window.pywebview.api.toggle_overlay();
+            btn.classList.toggle('active');
+            localStorage.setItem('overlay_enabled', btn.classList.contains('active').toString());
+        }
+    });
+}
+
+function initOverlaySettings() {
+    // Opacity slider in settings modal
+    const opacitySlider = document.getElementById('settings-overlay-opacity');
+    const opacityVal = document.getElementById('settings-overlay-opacity-val');
+    if (opacitySlider) {
+        opacitySlider.addEventListener('input', function(e) {
+            const val = parseInt(e.target.value);
+            opacityVal.textContent = val + '%';
+        });
+    }
+
+    // Scale slider in settings modal
+    const scaleSlider = document.getElementById('settings-overlay-scale');
+    const scaleVal = document.getElementById('settings-overlay-scale-val');
+    if (scaleSlider) {
+        scaleSlider.addEventListener('input', function(e) {
+            const val = parseInt(e.target.value);
+            scaleVal.textContent = val + '%';
         });
     }
 }
@@ -1303,22 +1379,22 @@ function renderPlayer(player) {
 // --- Cloud Sync UI ---
 
 function renderCloudStatus(status) {
-    const toggle = document.getElementById('cloud-sync-toggle');
+    const checkbox = document.getElementById('cloud-sync-checkbox');
     const indicator = document.getElementById('cloud-sync-status');
     const cloudSettingsSection = document.getElementById('cloud-settings-section');
 
     if (!status) {
-        toggle.checked = false;
-        toggle.disabled = true;
+        checkbox.checked = false;
+        checkbox.disabled = true;
         indicator.className = 'cloud-status-indicator';
         indicator.title = '클라우드 동기화 불가';
         if (cloudSettingsSection) cloudSettingsSection.style.display = 'none';
         return;
     }
 
-    // Always enable toggle so user can try to connect
-    toggle.disabled = false;
-    toggle.checked = status.enabled;
+    // Always enable checkbox so user can try to connect
+    checkbox.disabled = false;
+    checkbox.checked = status.enabled;
     cloudSyncEnabled = status.enabled;
     
     // Show/hide cloud settings section based on enabled state
@@ -1356,18 +1432,18 @@ function renderCloudStatus(status) {
     }
 }
 
-async function handleCloudSyncToggle(event) {
-    const enabled = event.target.checked;
-    const toggle = event.target;
+async function handleCloudSyncToggle() {
+    const checkbox = document.getElementById('cloud-sync-checkbox');
+    const enabled = checkbox.checked;
 
-    // Disable toggle while processing
-    toggle.disabled = true;
+    // Disable checkbox while processing
+    checkbox.disabled = true;
 
     const result = await toggleCloudSync(enabled);
 
     if (result) {
         cloudSyncEnabled = result.enabled;
-        toggle.checked = result.enabled;
+        checkbox.checked = result.enabled;
 
         if (!result.success && result.error) {
             alert(`클라우드 동기화 오류: ${result.error}`);
@@ -1386,10 +1462,10 @@ async function handleCloudSyncToggle(event) {
         }
     } else {
         // Revert on error
-        toggle.checked = !enabled;
+        checkbox.checked = !enabled;
     }
 
-    toggle.disabled = false;
+    checkbox.disabled = false;
 }
 
 async function fetchExchangePriceIds() {
@@ -1686,11 +1762,54 @@ async function openSettingsModal() {
         cloudMidnightRefresh: document.getElementById('cloud-midnight-refresh').checked,
         cloudExchangeOverride: document.getElementById('cloud-exchange-override').checked,
         cloudStartupRefresh: document.getElementById('cloud-startup-refresh').checked,
-        refreshInterval: savedInterval
+        refreshInterval: savedInterval,
+        // Overlay settings (loaded from API)
+        overlayOpacity: 90,
+        overlayScale: 100,
+        overlayTextShadow: true,
+        overlayColumns: ['profit','run_time','total_profit','total_time','map_hr','total_hr','contract']
     };
-    
+
     // Reset pending settings
     pendingSettings = {};
+
+    // Ensure overlay settings section is visible in pywebview mode
+    if (typeof window.pywebview !== 'undefined') {
+        const overlaySection = document.getElementById('overlay-settings-section');
+        if (overlaySection) overlaySection.style.display = '';
+    }
+
+    // Load overlay settings from API if in pywebview mode
+    if (typeof window.pywebview !== 'undefined' && window.pywebview.api) {
+        try {
+            const overlayResp = await fetch(`${API_BASE}/overlay/config`);
+            if (overlayResp.ok) {
+                const overlayConfig = await overlayResp.json();
+                const bgOpacityPct = Math.round((overlayConfig.bg_opacity != null ? overlayConfig.bg_opacity : 0.7) * 100);
+                const scalePct = Math.round((overlayConfig.scale || 1.0) * 100);
+
+                document.getElementById('settings-overlay-opacity').value = bgOpacityPct;
+                document.getElementById('settings-overlay-opacity-val').textContent = bgOpacityPct + '%';
+                document.getElementById('settings-overlay-scale').value = scalePct;
+                document.getElementById('settings-overlay-scale-val').textContent = scalePct + '%';
+                document.getElementById('settings-overlay-text-shadow').checked = overlayConfig.text_shadow !== false;
+
+                // Set column checkboxes
+                const cols = overlayConfig.visible_columns || ['profit','run_time','total_profit','total_time','map_hr','total_hr','contract'];
+                document.querySelectorAll('.overlay-col-toggle input').forEach(cb => {
+                    cb.checked = cols.includes(cb.value);
+                });
+
+                // Store originals
+                originalSettings.overlayOpacity = bgOpacityPct;
+                originalSettings.overlayScale = scalePct;
+                originalSettings.overlayTextShadow = overlayConfig.text_shadow !== false;
+                originalSettings.overlayColumns = [...cols];
+            }
+        } catch (e) {
+            console.error('Failed to load overlay config:', e);
+        }
+    }
 
     // Fetch current log path from status
     try {
@@ -1735,7 +1854,19 @@ function cancelSettings() {
     document.getElementById('cloud-startup-refresh').checked = originalSettings.cloudStartupRefresh;
     document.getElementById('refresh-interval-slider').value = originalSettings.refreshInterval;
     document.getElementById('refresh-interval-input').value = originalSettings.refreshInterval;
-    
+
+    // Revert overlay settings
+    if (typeof window.pywebview !== 'undefined' && window.pywebview.api) {
+        document.getElementById('settings-overlay-opacity').value = originalSettings.overlayOpacity;
+        document.getElementById('settings-overlay-opacity-val').textContent = originalSettings.overlayOpacity + '%';
+        document.getElementById('settings-overlay-scale').value = originalSettings.overlayScale;
+        document.getElementById('settings-overlay-scale-val').textContent = originalSettings.overlayScale + '%';
+        document.getElementById('settings-overlay-text-shadow').checked = originalSettings.overlayTextShadow;
+        document.querySelectorAll('.overlay-col-toggle input').forEach(cb => {
+            cb.checked = (originalSettings.overlayColumns || []).includes(cb.value);
+        });
+    }
+
     // Clear pending and close
     pendingSettings = {};
     closeSettingsModal();
@@ -1824,7 +1955,48 @@ async function saveAllSettings() {
         if (refreshIntervalVal !== originalSettings.refreshInterval) {
             updateRefreshInterval(refreshIntervalVal);
         }
-        
+
+        // Save overlay settings if in pywebview mode
+        if (typeof window.pywebview !== 'undefined' && window.pywebview.api) {
+            const newOpacity = parseInt(document.getElementById('settings-overlay-opacity').value);
+            const newScale = parseInt(document.getElementById('settings-overlay-scale').value);
+            const newTextShadow = document.getElementById('settings-overlay-text-shadow').checked;
+            const newColumns = [];
+            document.querySelectorAll('.overlay-col-toggle input:checked').forEach(cb => {
+                newColumns.push(cb.value);
+            });
+
+            const overlayUpdates = {};
+            if (newOpacity !== originalSettings.overlayOpacity) {
+                overlayUpdates.bg_opacity = newOpacity / 100;
+                localStorage.setItem('overlay_opacity', newOpacity);
+            }
+            if (newScale !== originalSettings.overlayScale) {
+                overlayUpdates.scale = newScale / 100;
+                localStorage.setItem('overlay_scale', newScale);
+            }
+            if (newTextShadow !== originalSettings.overlayTextShadow) {
+                overlayUpdates.text_shadow = newTextShadow;
+            }
+            const origCols = (originalSettings.overlayColumns || []).sort().join(',');
+            const newCols = newColumns.sort().join(',');
+            if (origCols !== newCols) {
+                overlayUpdates.visible_columns = newColumns;
+            }
+
+            if (Object.keys(overlayUpdates).length > 0) {
+                try {
+                    await fetch(`${API_BASE}/overlay/config`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(overlayUpdates)
+                    });
+                } catch (e) {
+                    console.error('Failed to save overlay config:', e);
+                }
+            }
+        }
+
         // Close modal
         closeSettingsModal();
         
@@ -3270,9 +3442,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load initial map costs state
     mapCostsEnabled = await fetchMapCostsSetting();
 
-    // Set up cloud sync toggle
-    const cloudSyncToggle = document.getElementById('cloud-sync-toggle');
-    cloudSyncToggle.addEventListener('change', handleCloudSyncToggle);
+    // Set up cloud sync toggle (now a checkbox toggle switch)
+    const cloudSyncCheckbox = document.getElementById('cloud-sync-checkbox');
+    if (cloudSyncCheckbox) {
+        cloudSyncCheckbox.addEventListener('change', handleCloudSyncToggle);
+    }
 
     // Initial cloud status check
     const cloudStatus = await fetchCloudStatus();
@@ -3306,19 +3480,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Sync inventory/runs heights on initial load
     syncInventoryHeight();
 
-    // Auto-refresh toggle
-    const autoRefreshCheckbox = document.getElementById('auto-refresh');
-    autoRefreshCheckbox.addEventListener('change', (e) => {
-        if (e.target.checked) {
+    // Auto-refresh toggle (now a checkbox toggle switch)
+    const autoRefreshCheckbox = document.getElementById('auto-refresh-checkbox');
+    if (autoRefreshCheckbox) {
+        autoRefreshCheckbox.addEventListener('change', () => {
+            if (autoRefreshCheckbox.checked) {
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh();
+            }
+        });
+        // Start auto-refresh by default (checkbox starts checked)
+        if (autoRefreshCheckbox.checked) {
             startAutoRefresh();
-        } else {
-            stopAutoRefresh();
         }
-    });
-
-    // Start auto-refresh by default
-    if (autoRefreshCheckbox.checked) {
-        startAutoRefresh();
     }
     
     // Initialize time tracking
@@ -3326,6 +3501,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize always-on-top toggle
     initAlwaysOnTop();
+
+    // Initialize overlay toggle
+    initOverlayToggle();
+    initOverlaySettings();
 
     // Initialize modal scrollbar detection
     initModalScrollbars();

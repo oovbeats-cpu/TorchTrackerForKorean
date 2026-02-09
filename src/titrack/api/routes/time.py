@@ -31,6 +31,7 @@ class TimeState(BaseModel):
     surgery_prep_start_ts: Optional[float] = None
     surgery_total_seconds: float = 0.0
     current_map_play_seconds: float = 0.0
+    contract_setting: Optional[str] = None
 
 
 class ToggleResponse(BaseModel):
@@ -58,6 +59,7 @@ def get_time_state(request: Request) -> TimeState:
             pause_settings=PauseSettingsModel(),
             surgery_prep_start_ts=None,
             surgery_total_seconds=0.0,
+            contract_setting=None,
         )
     
     state = time_tracker.get_state()
@@ -65,6 +67,11 @@ def get_time_state(request: Request) -> TimeState:
     surgery_prep_ts = None
     if state.surgery_prep_start_time:
         surgery_prep_ts = state.surgery_prep_start_time.timestamp()
+
+    # Get contract setting from collector
+    collector = getattr(request.app.state, "collector", None)
+    contract_setting = collector.current_contract_setting if collector else None
+
     return TimeState(
         total_play_state=state.total_play_state.value,
         total_play_seconds=state.total_play_seconds,
@@ -84,6 +91,7 @@ def get_time_state(request: Request) -> TimeState:
         surgery_prep_start_ts=surgery_prep_ts,
         surgery_total_seconds=state.surgery_total_seconds,
         current_map_play_seconds=state.current_map_play_seconds,
+        contract_setting=contract_setting,
     )
 
 
