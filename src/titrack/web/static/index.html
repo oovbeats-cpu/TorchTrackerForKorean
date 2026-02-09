@@ -14,7 +14,7 @@
         <div id="custom-titlebar" class="custom-titlebar hidden">
             <div class="titlebar-drag-region pywebview-drag-region"></div>
             <div class="titlebar-buttons">
-                <button class="titlebar-btn overlay-btn" id="overlay-toggle-btn" title="오버레이" style="display: none;">
+                <button class="titlebar-btn overlay-btn active" id="overlay-toggle-btn" title="오버레이" style="display: none;">
                     오버레이
                 </button>
                 <button class="titlebar-btn minimize-btn" onclick="minimizeWindow()" title="최소화">
@@ -42,41 +42,32 @@
         <div class="container">
             <!-- Top Control Bar -->
             <div class="top-control-bar">
-                <!-- LEFT: Toggle buttons -->
-                <div class="control-group-left">
-                    <div class="control-group">
-                        <label class="toggle-mini cloud-toggle">
-                            <input type="checkbox" id="cloud-sync-checkbox" />
-                            <span>클라우드 동기화</span>
-                        </label>
-                        <span id="cloud-sync-status" class="cloud-status-indicator" title="클라우드 동기화 상태"></span>
-                    </div>
-
-                    <div class="control-group">
-                        <label class="toggle-mini">
-                            <input type="checkbox" id="auto-refresh-checkbox" checked />
-                            <span>자동 새로고침</span>
-                        </label>
-                        <span id="status-indicator" class="status-dot"></span>
-                    </div>
-
-                    <div class="control-group" id="always-on-top-group" style="display: none;">
-                        <label class="toggle-mini">
-                            <input type="checkbox" id="always-on-top-checkbox" />
-                            <span>항상 위</span>
-                        </label>
-                    </div>
+                <div class="control-group">
+                    <label class="toggle-mini cloud-toggle">
+                        <input type="checkbox" id="cloud-sync-checkbox" />
+                        <span>클라우드 동기화</span>
+                    </label>
+                    <span id="cloud-sync-status" class="cloud-status-indicator" title="클라우드 동기화 상태"></span>
                 </div>
 
-                <!-- Spacer pushes right group to the end -->
-                <div class="control-spacer"></div>
-
-                <!-- RIGHT: Action buttons -->
-                <div class="control-group-right">
-                    <button class="control-btn" onclick="openSettingsModal()" title="설정">&#9881;</button>
-                    <button class="control-btn" onclick="openHelpModal()">사용 방법</button>
-                    <button class="control-btn" onclick="resetStats()">통계 초기화</button>
+                <div class="control-group">
+                    <label class="toggle-mini">
+                        <input type="checkbox" id="auto-refresh-checkbox" checked />
+                        <span>자동 새로고침</span>
+                    </label>
+                    <span id="status-indicator" class="status-dot"></span>
                 </div>
+
+                <div class="control-group" id="always-on-top-group" style="display: none;">
+                    <label class="toggle-mini">
+                        <input type="checkbox" id="always-on-top-checkbox" />
+                        <span>항상 위</span>
+                    </label>
+                </div>
+
+                <button class="control-btn" onclick="openSettingsModal()" title="설정">&#9881;</button>
+                <button class="control-btn" onclick="openHelpModal()">사용 방법</button>
+                <button class="control-btn" onclick="resetStats()">통계 초기화</button>
             </div>
 
             <header>
@@ -763,9 +754,19 @@
                                 <span class="toggle-desc">오버레이 텍스트에 그림자 효과 적용</span>
                             </div>
                         </label>
+                        <div class="overlay-preset-section">
+                            <span class="overlay-setting-label">뷰 프리셋</span>
+                            <div class="overlay-preset-buttons">
+                                <button class="preset-btn active" data-preset="1" title="가로 1행">1</button>
+                                <button class="preset-btn" data-preset="2" title="가로 2행">2</button>
+                                <button class="preset-btn" data-preset="3" title="세로 왼쪽">3</button>
+                            </div>
+                            <span class="overlay-preset-desc" id="preset-desc">가로 1행</span>
+                        </div>
                         <div class="overlay-columns-section">
                             <span class="overlay-setting-label">표시할 항목</span>
                             <div class="overlay-column-toggles">
+                                <label class="overlay-col-toggle"><input type="checkbox" value="run_count" checked /><span>회차</span></label>
                                 <label class="overlay-col-toggle"><input type="checkbox" value="profit" checked /><span>수익</span></label>
                                 <label class="overlay-col-toggle"><input type="checkbox" value="run_time" checked /><span>시간</span></label>
                                 <label class="overlay-col-toggle"><input type="checkbox" value="total_profit" checked /><span>누적</span></label>

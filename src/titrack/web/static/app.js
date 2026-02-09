@@ -989,6 +989,21 @@ function initOverlaySettings() {
             scaleVal.textContent = val + '%';
         });
     }
+
+    // Preset buttons
+    const presetDescs = {
+        '1': '가로 1행',
+        '2': '가로 2행',
+        '3': '세로 왼쪽'
+    };
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            const desc = document.getElementById('preset-desc');
+            if (desc) desc.textContent = presetDescs[this.dataset.preset] || '';
+        });
+    });
 }
 
 function initModalScrollbars() {
@@ -1800,11 +1815,23 @@ async function openSettingsModal() {
                     cb.checked = cols.includes(cb.value);
                 });
 
+                // Load preset
+                const preset = overlayConfig.preset || 1;
+                document.querySelectorAll('.preset-btn').forEach(b => {
+                    b.classList.toggle('active', parseInt(b.dataset.preset) === preset);
+                });
+                const desc = document.getElementById('preset-desc');
+                if (desc) {
+                    const descs = {'1':'가로 1행','2':'가로 2행','3':'세로 왼쪽'};
+                    desc.textContent = descs[preset] || '가로 1행';
+                }
+
                 // Store originals
                 originalSettings.overlayOpacity = bgOpacityPct;
                 originalSettings.overlayScale = scalePct;
                 originalSettings.overlayTextShadow = overlayConfig.text_shadow !== false;
                 originalSettings.overlayColumns = [...cols];
+                originalSettings.overlayPreset = preset;
             }
         } catch (e) {
             console.error('Failed to load overlay config:', e);
@@ -1966,6 +1993,9 @@ async function saveAllSettings() {
                 newColumns.push(cb.value);
             });
 
+            const presetBtn = document.querySelector('.preset-btn.active');
+            const newPreset = presetBtn ? parseInt(presetBtn.dataset.preset) : 1;
+
             const overlayUpdates = {};
             if (newOpacity !== originalSettings.overlayOpacity) {
                 overlayUpdates.bg_opacity = newOpacity / 100;
@@ -1982,6 +2012,9 @@ async function saveAllSettings() {
             const newCols = newColumns.sort().join(',');
             if (origCols !== newCols) {
                 overlayUpdates.visible_columns = newColumns;
+            }
+            if (newPreset !== (originalSettings.overlayPreset || 1)) {
+                overlayUpdates.preset = newPreset;
             }
 
             if (Object.keys(overlayUpdates).length > 0) {

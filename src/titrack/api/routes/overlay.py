@@ -24,6 +24,7 @@ DEFAULT_CONFIG = {
     "visible_columns": list(VALID_COLUMNS),
     "text_shadow": True,
     "bg_opacity": 0.7,
+    "preset": 1,
 }
 
 
@@ -35,6 +36,7 @@ class OverlayConfigUpdate(BaseModel):
     visible_columns: Optional[List[str]] = None
     text_shadow: Optional[bool] = None
     bg_opacity: Optional[float] = None
+    preset: Optional[int] = None
 
 
 def _get_config(request: Request) -> dict:
@@ -77,6 +79,8 @@ def update_overlay_config(request: Request, updates: OverlayConfigUpdate) -> dic
         config["text_shadow"] = updates.text_shadow
     if updates.bg_opacity is not None:
         config["bg_opacity"] = max(0.0, min(1.0, updates.bg_opacity))
+    if updates.preset is not None:
+        config["preset"] = max(1, min(3, updates.preset))
 
     request.app.state.overlay_config = config
     return config
