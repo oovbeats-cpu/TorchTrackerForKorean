@@ -222,3 +222,4 @@ class PerformanceStatsResponse(BaseModel):
     total_entry_cost_fe: float  # Negative value - map materials consumed
     total_gross_value_fe: float  # Total loot value before costs
     total_net_profit_fe: float  # Gross - costs
+    best_run_net_value_fe: float = 0.0  # Highest single-run net profit (for High Run detection)

@@ -393,6 +393,19 @@ def get_performance_stats(
     completed_runs = [r for r in completed_runs if not r.is_hub and r.end_ts is not None]
     completed_runs_total_seconds = sum(r.duration_seconds or 0 for r in completed_runs)
 
+    # Calculate best single-run net profit for High Run detection
+    map_costs_enabled = repo.get_setting("map_costs_enabled") == "true"
+    best_run_net_value = 0.0
+    for r in completed_runs:
+        _, run_value = repo.get_run_value(r.id)
+        run_cost = 0.0
+        if map_costs_enabled:
+            _, cost_value, _ = repo.get_run_cost(r.id)
+            run_cost = cost_value
+        run_net = run_value - run_cost
+        if run_net > best_run_net_value:
+            best_run_net_value = run_net
+
     # Get cumulative loot value (with tax applied)
     cumulative_loot = repo.get_cumulative_loot()
     tax_multiplier = repo.get_trade_tax_multiplier()
@@ -443,6 +456,7 @@ def get_performance_stats(
         total_entry_cost_fe=round(-total_entry_cost, 2),  # Negative to show as cost
         total_gross_value_fe=round(total_gross_value, 2),
         total_net_profit_fe=round(total_net_profit, 2),
+        best_run_net_value_fe=round(best_run_net_value, 2),
     )
 
 

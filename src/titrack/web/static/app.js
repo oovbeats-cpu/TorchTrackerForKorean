@@ -685,6 +685,11 @@ function renderRuns(data, forceRender = false) {
         const consolidatedInfo = run.consolidated_run_ids ? ` (${run.consolidated_run_ids.length}개 구간)` : '';
 
         // Show net value if costs are enabled and there are costs
+        const runProfit = (run.net_value_fe !== null && run.net_value_fe !== undefined && run.map_cost_fe > 0)
+            ? run.net_value_fe : run.total_value;
+        const runHighBadge = (runProfit >= 100 && (window._bestRunProfit <= 0 || runProfit >= window._bestRunProfit))
+            ? '<span class="high-run-badge">HIGH RUN</span>' : '';
+
         let valueDisplay;
         if (run.net_value_fe !== null && run.net_value_fe !== undefined && run.map_cost_fe > 0) {
             const warningIcon = run.map_cost_has_unpriced ? ' <span class="cost-warning" title="일부 비용의 가격을 알 수 없음">⚠</span>' : '';
@@ -695,7 +700,7 @@ function renderRuns(data, forceRender = false) {
 
         return `
             <tr class="${nightmareClass}">
-                <td class="zone-name" title="${run.zone_signature}${consolidatedInfo}">${escapeHtml(run.zone_name)}</td>
+                <td class="zone-name" title="${run.zone_signature}${consolidatedInfo}">${escapeHtml(run.zone_name)}${runHighBadge}</td>
                 <td class="duration">${formatDuration(run.duration_seconds)}</td>
                 <td>${valueDisplay}</td>
                 <td>
@@ -1063,8 +1068,15 @@ function renderActiveRun(data, forceRender = false) {
 
     // Show panel and update content
     panel.classList.remove('hidden');
-    zoneEl.textContent = data.zone_name;
     durationEl.textContent = `(${formatDuration(currentRunState.duration_seconds)})`;
+
+    // HIGH RUN badge next to zone name
+    const activeNetValue = (data.map_cost_fe !== null && data.map_cost_fe !== undefined && data.map_cost_fe > 0)
+        ? (data.net_value_fe !== null ? data.net_value_fe : data.total_value)
+        : data.total_value;
+    const isHighRun = activeNetValue >= 100 && (window._bestRunProfit <= 0 || activeNetValue > window._bestRunProfit);
+    const highRunBadge = isHighRun ? '<span class="high-run-badge">HIGH RUN</span>' : '';
+    zoneEl.innerHTML = `${escapeHtml(data.zone_name)}${highRunBadge}`;
 
     // Show value with cost info if map costs are enabled
     if (data.map_cost_fe !== null && data.map_cost_fe !== undefined && data.map_cost_fe > 0) {
@@ -2895,6 +2907,8 @@ async function refreshAll(forceRender = false) {
 
         renderStatus(status);
         renderStats(stats, inventory);
+        // Store best run profit for HIGH RUN badge detection
+        window._bestRunProfit = perfStats?.best_run_net_value_fe || 0;
         renderPerformanceStats(perfStats);
         renderCloudStatus(cloudStatus);
         renderActiveRun(activeRun, forceRender);

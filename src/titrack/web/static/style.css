@@ -3326,3 +3326,25 @@ tr.nightmare .zone-name {
     font-size: 0.75rem;
     color: var(--text-secondary);
 }
+
+/* HIGH RUN Badge */
+.high-run-badge {
+    display: inline-block;
+    background: #dc2626;
+    color: #ffffff;
+    font-family: 'Pretendard', 'Segoe UI', sans-serif;
+    font-size: 0.6rem;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+    letter-spacing: 0.5px;
+    line-height: 1.4;
+    animation: highRunPulse 2s ease-in-out infinite;
+}
+
+@keyframes highRunPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}

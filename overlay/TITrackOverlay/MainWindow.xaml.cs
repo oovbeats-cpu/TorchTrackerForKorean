@@ -79,6 +79,7 @@ namespace TITrackOverlay
         static readonly Color ColorProfitNeg = Color.FromRgb(231, 76, 60);
         static readonly Color ColorContract  = Color.FromRgb(93, 173, 226);
         static readonly Color ColorAccum     = Color.FromRgb(255, 165, 50);  // Orange for totals
+        static readonly Color ColorHighRunBg = Color.FromRgb(220, 38, 38);   // Red background for HIGH RUN badge
 
         // ── Column Definitions ──────────────────────────────────────
 
@@ -134,6 +135,9 @@ namespace TITrackOverlay
             ["contract"]     = "--",
         };
         bool _profitNegative;
+        double _bestRunProfit;  // Historical best single-run net profit
+        bool _isHighRun;        // Current run profit exceeds historical best
+        Border _highRunBadge;   // "HIGH RUN" badge element
 
         // Time interpolation (smooth 1-second display without extra API calls)
         double _apiTotalSec;       // Last API-reported total_play_seconds
@@ -363,6 +367,13 @@ namespace TITrackOverlay
                     (def.Key == "profit" && _profitNegative) ? ColorProfitNeg : def.ValueColor);
                 panel.Children.Add(value);
 
+                // Add HIGH RUN badge next to profit
+                if (def.Key == "profit")
+                {
+                    _highRunBadge = CreateHighRunBadge();
+                    panel.Children.Add(_highRunBadge);
+                }
+
                 Grid.SetColumn(panel, i);
                 _innerGrid.Children.Add(panel);
                 _valueBlocks[def.Key] = value;
@@ -421,6 +432,13 @@ namespace TITrackOverlay
                         13, FontWeights.Bold,
                         (def.Key == "profit" && _profitNegative) ? ColorProfitNeg : def.ValueColor);
                     panel.Children.Add(value);
+
+                    if (def.Key == "profit")
+                    {
+                        _highRunBadge = CreateHighRunBadge();
+                        panel.Children.Add(_highRunBadge);
+                    }
+
                     Grid.SetColumn(panel, i);
                     grid.Children.Add(panel);
                     _valueBlocks[def.Key] = value;
@@ -469,6 +487,13 @@ namespace TITrackOverlay
                     13, FontWeights.Bold,
                     (def.Key == "profit" && _profitNegative) ? ColorProfitNeg : def.ValueColor);
                 panel.Children.Add(value);
+
+                if (def.Key == "profit")
+                {
+                    _highRunBadge = CreateHighRunBadge();
+                    panel.Children.Add(_highRunBadge);
+                }
+
                 _valueBlocks[def.Key] = value;
 
                 stack.Children.Add(panel);
@@ -479,6 +504,32 @@ namespace TITrackOverlay
             ContentGrid.Children.Add(_bgBorder);
             SizeToContent = SizeToContent.WidthAndHeight;
             Height = double.NaN;  // Auto height
+        }
+
+        Border CreateHighRunBadge()
+        {
+            var text = new TextBlock
+            {
+                Text = "HIGH RUN",
+                FontSize = 10 * _scale,
+                FontWeight = FontWeights.ExtraBold,
+                FontFamily = new FontFamily("Pretendard, Segoe UI, sans-serif"),
+                Foreground = Brushes.White,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+
+            var badge = new Border
+            {
+                Background = new SolidColorBrush(ColorHighRunBg),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(5, 1, 5, 1),
+                Margin = new Thickness(4, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = text,
+                Visibility = Visibility.Collapsed,
+            };
+
+            return badge;
         }
 
         TextBlock MakeText(string text, double baseSize, FontWeight weight, Color color)
@@ -544,6 +595,13 @@ namespace TITrackOverlay
                         tb.Foreground = new SolidColorBrush(c);
                     }
                 }
+            }
+
+            // Update HIGH RUN badge visibility
+            if (_highRunBadge != null)
+            {
+                _highRunBadge.Visibility = (_isHighRun && _hasActiveRun)
+                    ? Visibility.Visible : Visibility.Collapsed;
             }
         }
 
@@ -675,6 +733,12 @@ namespace TITrackOverlay
                         _profitNegative = neg;
                         changed = true;
                     }
+
+                    // High Run: profit >= 100 FE and exceeds historical best
+                    // First run (no history): any profit >= 100 triggers it
+                    bool wasHigh = _isHighRun;
+                    _isHighRun = val >= 100 && (_bestRunProfit <= 0 || val > _bestRunProfit);
+                    if (_isHighRun != wasHigh) changed = true;
                 }
                 else
                 {
@@ -686,6 +750,7 @@ namespace TITrackOverlay
                         _profitNegative = false;
                         changed = true;
                     }
+                    if (_isHighRun) { _isHighRun = false; changed = true; }
                 }
             }
             catch { _hasActiveRun = false; }
@@ -741,6 +806,10 @@ namespace TITrackOverlay
                     string tp = FormatFE(GetNum(doc, "total_net_profit_fe") ?? 0);
 
                     // Run count: completed + 1 if currently in a run
+                    // High Run detection
+                    double bestProfit = GetNum(doc, "best_run_net_value_fe") ?? 0;
+                    _bestRunProfit = bestProfit;
+
                     int completed = (int)(GetNum(doc, "run_count") ?? 0);
                     int current = _hasActiveRun ? completed + 1 : completed;
                     string rc = $"{current}회차";

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>..\..\src\titrack\web\static\app_icon.ico</ApplicationIcon>
+    <AssemblyName>TITrackOverlay</AssemblyName>
+    <RootNamespace>TITrackOverlay</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="Fonts\KOMIKAX_.ttf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+</Project>
