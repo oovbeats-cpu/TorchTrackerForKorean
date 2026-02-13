@@ -290,31 +290,39 @@ GRANT EXECUTE ON FUNCTION submit_price TO authenticated;
 -- should only be called by scheduled jobs (pg_cron) or service role
 
 -- ============================================================================
--- SCHEDULED JOBS (pg_cron)
+-- SCHEDULED JOBS (DISABLED - pg_cron not required)
 -- ============================================================================
--- Note: pg_cron must be enabled in your Supabase project settings
--- Go to Database > Extensions and enable pg_cron
+-- Note: These are OPTIONAL automation jobs. The system works without them.
+-- If you want to enable automatic price aggregation, enable pg_cron extension:
+--   1. Go to Supabase Dashboard > Database > Extensions
+--   2. Enable "pg_cron" extension
+--   3. Uncomment the SELECT cron.schedule() calls below
+--
+-- Manual alternatives:
+--   - Run aggregate_prices() manually via SQL editor
+--   - Run snapshot_price_history() manually
+--   - Run cleanup_old_submissions() manually
 
 -- Run aggregation every 5 minutes
-SELECT cron.schedule(
-    'aggregate-prices',
-    '*/5 * * * *',
-    $$SELECT aggregate_prices()$$
-);
+-- SELECT cron.schedule(
+--     'aggregate-prices',
+--     '*/5 * * * *',
+--     $$SELECT aggregate_prices()$$
+-- );
 
 -- Run history snapshot every hour
-SELECT cron.schedule(
-    'snapshot-price-history',
-    '0 * * * *',
-    $$SELECT snapshot_price_history()$$
-);
+-- SELECT cron.schedule(
+--     'snapshot-price-history',
+--     '0 * * * *',
+--     $$SELECT snapshot_price_history()$$
+-- );
 
 -- Run cleanup daily at 3 AM UTC
-SELECT cron.schedule(
-    'cleanup-old-submissions',
-    '0 3 * * *',
-    $$SELECT cleanup_old_submissions()$$
-);
+-- SELECT cron.schedule(
+--     'cleanup-old-submissions',
+--     '0 3 * * *',
+--     $$SELECT cleanup_old_submissions()$$
+-- );
 
 -- ============================================================================
 -- VERIFICATION QUERIES (run these to verify setup)

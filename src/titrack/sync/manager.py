@@ -209,24 +209,41 @@ class SyncManager:
             price_fe: Calculated reference price
             prices_array: Full array of prices from AH search
         """
+        print(f"[QUEUE] START: config_base_id={config_base_id}, season_id={season_id}")
+        print(f"[QUEUE] is_enabled={self.is_enabled}, is_upload_enabled={self.is_upload_enabled}")
+
         if not self.is_enabled or not self.is_upload_enabled:
+            print(f"[QUEUE] SKIPPED: disabled")
             return
 
         # Store in queue
-        self.db.execute(
-            """
-            INSERT INTO cloud_sync_queue
-            (config_base_id, season_id, price_fe, prices_array, queued_at, status)
-            VALUES (?, ?, ?, ?, ?, 'pending')
-            """,
-            (
-                config_base_id,
-                season_id,
-                price_fe,
-                json.dumps(prices_array),
-                datetime.now().isoformat(),
-            ),
-        )
+        print(f"[QUEUE] Executing INSERT...")
+        try:
+            self.db.execute(
+                """
+                INSERT INTO cloud_sync_queue
+                (config_base_id, season_id, price_fe, prices_array, queued_at, status)
+                VALUES (?, ?, ?, ?, ?, 'pending')
+                """,
+                (
+                    config_base_id,
+                    season_id,
+                    price_fe,
+                    json.dumps(prices_array),
+                    datetime.now().isoformat(),
+                ),
+            )
+            print(f"[QUEUE] INSERT executed successfully")
+
+            # Verify insertion - check both specific item and total queue
+            specific_count = self.db.fetchone("SELECT COUNT(*) FROM cloud_sync_queue WHERE config_base_id = ?", (config_base_id,))
+            total_count = self.db.fetchone("SELECT COUNT(*) FROM cloud_sync_queue")
+            print(f"[QUEUE] Verification: {specific_count[0] if specific_count else 0} rows for config_base_id={config_base_id}, total queue: {total_count[0] if total_count else 0}")
+        except Exception as e:
+            print(f"[QUEUE] ERROR during INSERT: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
     def get_status_info(self) -> SyncStatusInfo:
         """Get current sync status information."""

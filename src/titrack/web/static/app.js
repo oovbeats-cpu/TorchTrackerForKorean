@@ -1808,6 +1808,131 @@ let originalSettings = {};
 // Store pending settings changes (applied on save)
 let pendingSettings = {};
 
+// --- Item Data Sync Functions ---
+
+// Format relative time or absolute datetime
+function formatSyncTime(dateStr) {
+    if (!dateStr) return '-';
+
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now - date;
+
+    // Less than 1 minute
+    if (diff < 60000) {
+        return '방금 전';
+    }
+
+    // Less than 1 hour
+    if (diff < 3600000) {
+        const minutes = Math.floor(diff / 60000);
+        return `${minutes}분 전`;
+    }
+
+    // Less than 24 hours
+    if (diff < 86400000) {
+        const hours = Math.floor(diff / 3600000);
+        return `${hours}시간 전`;
+    }
+
+    // Otherwise: YYYY-MM-DD HH:MM
+    return date.toLocaleString('ko-KR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+// Load item sync status
+async function loadItemSyncStatus() {
+    try {
+        const response = await fetch(`${API_BASE}/cloud/items/last-sync`);
+        if (!response.ok) {
+            console.warn('Failed to load item sync status');
+            return;
+        }
+
+        const data = await response.json();
+
+        const lastSyncEl = document.getElementById('last-sync-time');
+        const totalItemsEl = document.getElementById('total-items-count');
+
+        if (lastSyncEl) {
+            lastSyncEl.textContent = formatSyncTime(data.last_sync);
+        }
+
+        if (totalItemsEl) {
+            totalItemsEl.textContent = data.total_items ? formatNumber(data.total_items) : '0';
+        }
+    } catch (error) {
+        console.error('Error loading item sync status:', error);
+    }
+}
+
+// Sync items from Supabase
+async function syncItemsFromCloud() {
+    const btn = document.getElementById('sync-items-btn');
+    const progress = document.getElementById('sync-progress');
+    const progressFill = document.getElementById('sync-progress-fill');
+    const progressText = document.getElementById('sync-progress-text');
+
+    if (!btn || !progress || !progressFill || !progressText) return;
+
+    // UI state: start sync
+    btn.disabled = true;
+    progress.classList.remove('hidden');
+    progressFill.style.width = '30%';
+    progressText.textContent = '클라우드에서 데이터 가져오는 중...';
+
+    try {
+        const response = await fetch(`${API_BASE}/cloud/items/sync`, {
+            method: 'POST'
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || '동기화 실패');
+        }
+
+        const result = await response.json();
+
+        // Success
+        progressFill.style.width = '100%';
+        progressText.textContent = `완료! ${formatNumber(result.synced_count)}개 아이템 동기화됨`;
+
+        // Refresh status after 2 seconds
+        setTimeout(() => {
+            loadItemSyncStatus();
+            progress.classList.add('hidden');
+            progressFill.style.width = '0%';
+        }, 2000);
+
+    } catch (error) {
+        console.error('Item sync failed:', error);
+        progressText.textContent = '❌ 동기화 실패: ' + error.message;
+        progressFill.style.width = '0%';
+
+        setTimeout(() => {
+            progress.classList.add('hidden');
+        }, 3000);
+
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// Initialize item sync UI
+function initItemSyncUI() {
+    const syncBtn = document.getElementById('sync-items-btn');
+    if (syncBtn) {
+        syncBtn.addEventListener('click', syncItemsFromCloud);
+    }
+}
+
+// --- End Item Data Sync Functions ---
+
 async function openSettingsModal() {
     const modal = document.getElementById('settings-modal');
     const currentPathEl = document.getElementById('current-log-path');
@@ -1934,6 +2059,9 @@ async function openSettingsModal() {
     } catch (error) {
         currentPathEl.textContent = 'Unable to fetch current path';
     }
+
+    // Load item sync status
+    loadItemSyncStatus();
 
     modal.classList.remove('hidden');
 }
@@ -4178,6 +4306,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize overlay toggle
     initOverlayToggle();
     initOverlaySettings();
+
+    // Initialize item sync UI
+    initItemSyncUI();
 
     // Initialize modal scrollbar detection
     initModalScrollbars();

@@ -584,7 +584,7 @@ class Collector:
                 return  # No prices to process
 
             # Calculate reference price (10th percentile by default)
-            ref_price = calculate_reference_price(event.prices_fe, method="percentile_10")
+            ref_price = calculate_reference_price(event.prices_fe, method="smart")
 
             # Create and store price (tagged with season_id for isolation)
             price = Price(
@@ -602,6 +602,8 @@ class Collector:
 
             # Queue for cloud sync (only exchange-sourced prices)
             if self._sync_manager is not None:
+                print(f"Cloud sync: Attempting to queue price for {config_base_id}")
+                print(f"Cloud sync: is_enabled={self._sync_manager.is_enabled}, is_upload_enabled={self._sync_manager.is_upload_enabled}")
                 try:
                     self._sync_manager.queue_price_submission(
                         config_base_id=config_base_id,
@@ -609,8 +611,13 @@ class Collector:
                         price_fe=ref_price,
                         prices_array=event.prices_fe,
                     )
+                    print(f"Cloud sync: Successfully queued price for {config_base_id}")
                 except Exception as e:
                     print(f"Cloud sync: Failed to queue price: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"Cloud sync: sync_manager is None, skipping")
 
     def process_file(self, from_beginning: bool = False) -> int:
         """

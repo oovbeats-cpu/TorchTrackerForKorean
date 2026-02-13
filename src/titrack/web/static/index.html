@@ -751,6 +751,38 @@
                         <span class="toggle-desc">데이터 새로고침 간격 (1초 ~ 5초)</span>
                     </section>
 
+                    <!-- Item Data Sync Section -->
+                    <section class="settings-section">
+                        <h4>🔄 아이템 데이터 동기화</h4>
+                        <p class="setting-description">
+                            클라우드에서 최신 아이템 메타데이터를 가져옵니다.
+                            (한국어 이름, 아이콘, 카테고리 등)
+                        </p>
+
+                        <div class="sync-status">
+                            <div class="status-row">
+                                <span>마지막 동기화:</span>
+                                <span id="last-sync-time">-</span>
+                            </div>
+                            <div class="status-row">
+                                <span>총 아이템 수:</span>
+                                <span id="total-items-count">-</span>
+                            </div>
+                        </div>
+
+                        <button id="sync-items-btn" class="btn btn-primary sync-items-btn">
+                            <span class="btn-icon">🔄</span>
+                            지금 동기화
+                        </button>
+
+                        <div id="sync-progress" class="sync-progress hidden">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="sync-progress-fill"></div>
+                            </div>
+                            <p class="progress-text" id="sync-progress-text">동기화 중...</p>
+                        </div>
+                    </section>
+
                     <!-- Overlay Settings Section (pywebview only) -->
                     <section class="settings-section" id="overlay-settings-section" style="display: none;">
                         <h4>오버레이 설정</h4>

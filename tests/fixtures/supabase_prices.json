@@ -1,0 +1,22 @@
+[
+  {
+    "config_base_id": 100300,
+    "season_id": 1,
+    "price_fe_median": 1.0,
+    "price_fe_p10": 0.9,
+    "price_fe_p90": 1.1,
+    "submission_count": 1000,
+    "unique_devices": 250,
+    "updated_at": "2026-02-12T10:00:00Z"
+  },
+  {
+    "config_base_id": 200100,
+    "season_id": 1,
+    "price_fe_median": 150.0,
+    "price_fe_p10": 120.0,
+    "price_fe_p90": 180.0,
+    "submission_count": 500,
+    "unique_devices": 150,
+    "updated_at": "2026-02-12T09:00:00Z"
+  }
+]

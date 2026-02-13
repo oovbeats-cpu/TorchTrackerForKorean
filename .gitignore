@@ -47,5 +47,10 @@ DummyLog/
 nul
 attached_assets/
 
+# Environment variables
+.env
+.env.*
+!.env.example
+
 # Misc
 TITrack_Architecture.md

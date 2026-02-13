@@ -1,10 +1,11 @@
 """Parser for exchange/auction house price messages."""
 
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Optional
+from typing import Any, Optional
 
 
 class ExchangeMessageType(Enum):
@@ -30,6 +31,7 @@ class ExchangePriceResponse:
     syn_id: int
     prices_fe: list[float]  # Unit prices in FE, sorted low to high
     timestamp: datetime = field(default_factory=datetime.now)
+    is_volatile: bool = False  # Price volatility indicator
 
 
 # Patterns for exchange messages
@@ -204,19 +206,106 @@ class ExchangeMessageParser:
         if not prices_fe:
             return None
 
+        # Calculate volatility
+        volatility = calculate_price_volatility(prices_fe)
+
         return ExchangePriceResponse(
             syn_id=self._syn_id,
             prices_fe=prices_fe,
+            is_volatile=volatility["is_volatile"],
         )
 
 
-def calculate_reference_price(prices: list[float], method: str = "percentile_10") -> float:
+def remove_outliers_iqr(prices: list[float]) -> list[float]:
+    """
+    IQR 방식으로 이상가 제거.
+
+    Args:
+        prices: Sorted price list (low to high)
+
+    Returns:
+        Filtered price list with outliers removed
+    """
+    if len(prices) < 4:
+        return prices
+
+    Q1 = prices[len(prices) // 4]
+    Q3 = prices[len(prices) * 3 // 4]
+    IQR = Q3 - Q1
+
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+
+    filtered = [p for p in prices if lower_bound <= p <= upper_bound]
+    return filtered if filtered else prices
+
+
+def calculate_mode_price(prices: list[float], bin_size: float = 0.5) -> tuple[float, int]:
+    """
+    거래집중가 계산 (가장 많이 거래되는 가격대).
+
+    Args:
+        prices: Sorted price list (low to high)
+        bin_size: Bin size for grouping prices (default: 0.5 FE)
+
+    Returns:
+        (mode_price, mode_count): 거래집중가와 해당 구간의 개수
+    """
+    # 가격을 구간으로 분류 (0.5 FE 단위)
+    bins = [round(p / bin_size) * bin_size for p in prices]
+    counter = Counter(bins)
+
+    # 가장 빈도 높은 구간
+    most_common_bin, mode_count = counter.most_common(1)[0]
+
+    # 해당 구간의 평균값
+    mode_prices = [p for p in prices if round(p / bin_size) * bin_size == most_common_bin]
+    mode_price = sum(mode_prices) / len(mode_prices)
+
+    return mode_price, mode_count
+
+
+def calculate_price_volatility(prices: list[float]) -> dict[str, Any]:
+    """
+    가격 변동성 계산.
+
+    Args:
+        prices: Sorted price list (low to high)
+
+    Returns:
+        {
+            "iqr": IQR 값,
+            "volatility_ratio": IQR/Median 비율,
+            "is_volatile": 변동성 높음 여부 (ratio > 0.3)
+        }
+    """
+    if len(prices) < 4:
+        return {"iqr": 0.0, "volatility_ratio": 0.0, "is_volatile": False}
+
+    filtered = remove_outliers_iqr(prices)
+
+    Q1 = filtered[len(filtered) // 4]
+    Q3 = filtered[len(filtered) * 3 // 4]
+    IQR = Q3 - Q1
+    median = filtered[len(filtered) // 2]
+
+    volatility_ratio = IQR / median if median > 0 else 0.0
+
+    return {
+        "iqr": IQR,
+        "volatility_ratio": volatility_ratio,
+        "is_volatile": volatility_ratio > 0.3,  # 30% 이상이면 변동성 높음
+    }
+
+
+def calculate_reference_price(prices: list[float], method: str = "smart") -> float:
     """
     Calculate a reference price from a list of prices.
 
     Args:
         prices: List of unit prices, assumed sorted low to high
         method: Calculation method:
+            - "smart": IQR filtering + Mode(거래집중가) with fallback to median
             - "lowest": Use lowest price
             - "percentile_10": Use 10th percentile (good balance)
             - "percentile_20": Use 20th percentile
@@ -231,7 +320,26 @@ def calculate_reference_price(prices: list[float], method: str = "percentile_10"
 
     n = len(prices)
 
-    if method == "lowest":
+    if method == "smart":
+        # 1. IQR로 이상가 제거
+        filtered = remove_outliers_iqr(prices)
+
+        # 데이터 부족 시 median 사용
+        if len(filtered) < 10:
+            return filtered[len(filtered) // 2]
+
+        # 2. Mode 계산
+        mode_price, mode_count = calculate_mode_price(filtered)
+        mode_ratio = mode_count / len(filtered)
+
+        # 3. Mode 신뢰도 검증 (20% 이상이 같은 구간)
+        if mode_ratio >= 0.2:
+            return mode_price
+        else:
+            # 신뢰도 낮으면 Median 사용
+            return filtered[len(filtered) // 2]
+
+    elif method == "lowest":
         return prices[0]
     elif method == "percentile_10":
         idx = max(0, int(n * 0.10) - 1)
@@ -247,6 +355,13 @@ def calculate_reference_price(prices: list[float], method: str = "percentile_10"
         count = max(1, int(n * 0.20))
         return sum(prices[:count]) / count
     else:
-        # Default to 10th percentile
-        idx = max(0, int(n * 0.10) - 1)
-        return prices[idx]
+        # Default to smart method
+        filtered = remove_outliers_iqr(prices)
+        if len(filtered) < 10:
+            return filtered[len(filtered) // 2]
+        mode_price, mode_count = calculate_mode_price(filtered)
+        mode_ratio = mode_count / len(filtered)
+        if mode_ratio >= 0.2:
+            return mode_price
+        else:
+            return filtered[len(filtered) // 2]

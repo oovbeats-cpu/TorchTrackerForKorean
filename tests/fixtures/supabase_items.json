@@ -1,0 +1,17 @@
+[
+  {
+    "config_base_id": 100300,
+    "name_ko": "화염 원소",
+    "name_en": "Flame Elementium",
+    "category": "currency",
+    "tier": 1
+  },
+  {
+    "config_base_id": 200100,
+    "name_ko": "십자가",
+    "name_en": "Reaper",
+    "category": "equipment",
+    "subcategory": "reaper",
+    "tier": 5
+  }
+]

@@ -166,6 +166,86 @@ class Database:
             )
             print("Migration: Added session_id column to runs table")
 
+        # V5 migrations: Supabase items table alignment
+        self._migrate_v4_to_v5(cursor)
+
+    def _migrate_v4_to_v5(self, cursor: sqlite3.Cursor) -> None:
+        """
+        Migration v4 → v5: Align items table with Supabase schema.
+
+        Adds columns to support multilingual names, types, categories,
+        and item classification for cloud synchronization.
+
+        New columns:
+        - name_ko TEXT - Korean name (primary for TITrack Korean)
+        - type_ko TEXT - Korean type (화폐, 장비, 재료, 스킬, 레전드)
+        - type_en TEXT - English type (currency, equipment, material, skill, legendary)
+        - url_tlidb TEXT - TLIDB item page link
+        - category TEXT - Major category (currency, material, equipment, skill, legendary)
+        - subcategory TEXT - Minor category (claw, hammer, sword, axe, dagger, etc.)
+        - tier INTEGER - Item tier (1-10, higher = rarer)
+        - tradeable INTEGER - Can be traded (BOOLEAN as INTEGER: 0/1)
+        - stackable INTEGER - Can stack in inventory (BOOLEAN as INTEGER: 0/1)
+        - created_at TEXT - Creation timestamp
+        - updated_at TEXT - Last update timestamp
+
+        Preserves existing data:
+        - config_base_id, name_en, name_cn, type_cn, icon_url, url_en, url_cn
+
+        New columns are NULL-able and will be populated via Supabase sync.
+        """
+        # Check existing columns in items table
+        cursor.execute("PRAGMA table_info(items)")
+        items_columns = [row[1] for row in cursor.fetchall()]
+
+        # List of new columns to add (column_name, sql_type, default_value)
+        # Note: SQLite uses INTEGER for BOOLEAN (0=False, 1=True)
+        new_columns = [
+            ("name_ko", "TEXT", None),
+            ("type_ko", "TEXT", None),
+            ("type_en", "TEXT", None),
+            ("url_tlidb", "TEXT", None),
+            ("category", "TEXT", None),
+            ("subcategory", "TEXT", None),
+            ("tier", "INTEGER", None),
+            ("tradeable", "INTEGER", "1"),  # Default TRUE
+            ("stackable", "INTEGER", "1"),  # Default TRUE
+            ("created_at", "TEXT", None),
+            ("updated_at", "TEXT", None),
+        ]
+
+        # Add missing columns one by one
+        # SQLite doesn't support adding multiple columns in one statement
+        migration_count = 0
+        for col_name, col_type, default_val in new_columns:
+            if col_name not in items_columns:
+                if default_val is not None:
+                    cursor.execute(
+                        f"ALTER TABLE items ADD COLUMN {col_name} {col_type} DEFAULT {default_val}"
+                    )
+                else:
+                    cursor.execute(
+                        f"ALTER TABLE items ADD COLUMN {col_name} {col_type}"
+                    )
+                migration_count += 1
+
+        if migration_count > 0:
+            print(f"Migration v4→v5: Added {migration_count} columns to items table")
+
+        # Create indexes for new columns (only if not already exist)
+        # Note: CREATE INDEX IF NOT EXISTS is supported since SQLite 3.3.0
+        index_statements = [
+            "CREATE INDEX IF NOT EXISTS idx_items_category ON items(category)",
+            "CREATE INDEX IF NOT EXISTS idx_items_subcategory ON items(subcategory)",
+            "CREATE INDEX IF NOT EXISTS idx_items_tier ON items(tier)",
+            "CREATE INDEX IF NOT EXISTS idx_items_updated ON items(updated_at)",
+        ]
+
+        for idx_stmt in index_statements:
+            cursor.execute(idx_stmt)
+
+        print("Migration v4→v5: Created indexes on items table (category, subcategory, tier, updated_at)")
+
     def _auto_seed_items(self, cursor: sqlite3.Cursor) -> None:
         """
         Auto-seed items table on first run if empty.

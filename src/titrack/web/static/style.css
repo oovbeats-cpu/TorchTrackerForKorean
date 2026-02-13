@@ -2953,6 +2953,98 @@ tr.nightmare .zone-name {
     opacity: 0.9;
 }
 
+/* Item Data Sync Section Styles */
+.setting-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 12px;
+    line-height: 1.5;
+}
+
+.sync-status {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 12px 0;
+}
+
+.status-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 14px;
+}
+
+.status-row span:first-child {
+    color: #999;
+}
+
+.status-row span:last-child {
+    color: #fff;
+    font-weight: 500;
+}
+
+/* Sync Items Button */
+.sync-items-btn {
+    background: var(--positive);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: opacity 0.2s;
+    width: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sync-items-btn:hover:not(:disabled) {
+    opacity: 0.9;
+}
+
+.sync-items-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-icon {
+    font-size: 1rem;
+}
+
+/* Sync Progress */
+.sync-progress {
+    margin-top: 16px;
+}
+
+.sync-progress.hidden {
+    display: none;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4CAF50, #8BC34A);
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #aaa;
+    text-align: center;
+}
+
 .settings-row {
     display: flex;
     align-items: center;

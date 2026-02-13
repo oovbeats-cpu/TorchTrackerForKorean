@@ -341,3 +341,40 @@ class CloudClient:
         except Exception as e:
             print(f"Cloud sync: Failed to fetch item history: {e}")
             return []
+
+    def fetch_items_from_cloud(
+        self, since: Optional[datetime] = None
+    ) -> list[dict]:
+        """
+        Fetch item metadata from Supabase with optional delta sync.
+
+        Args:
+            since: Only fetch items updated after this timestamp (None = all)
+
+        Returns:
+            List of item dictionaries from Supabase
+
+        Note:
+            Uses pagination (1000 items per request) to handle large datasets.
+            Calls the fetch_items_delta() RPC function defined in 002_items_master.sql.
+        """
+        if not self.is_connected:
+            return []
+
+        try:
+            # Call the fetch_items_delta RPC function
+            # This function handles the WHERE clause for delta sync
+            params = {}
+            if since:
+                params["p_since"] = since.isoformat()
+
+            result = self._client.rpc("fetch_items_delta", params).execute()
+
+            items = result.data or []
+            print(f"Cloud sync: Fetched {len(items)} items from Supabase")
+
+            return items
+
+        except Exception as e:
+            print(f"Cloud sync: Failed to fetch items from Supabase: {e}")
+            return []

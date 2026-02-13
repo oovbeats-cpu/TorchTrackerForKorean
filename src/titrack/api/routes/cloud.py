@@ -99,6 +99,22 @@ class CloudPriceHistoryResponse(BaseModel):
     history: list[PriceHistoryPoint]
 
 
+class ItemsSyncResponse(BaseModel):
+    """Response for items sync operation."""
+
+    success: bool
+    synced_count: int = 0
+    last_sync: Optional[str] = None
+    error: Optional[str] = None
+
+
+class ItemsLastSyncResponse(BaseModel):
+    """Response for items last sync query."""
+
+    last_sync: Optional[str] = None
+    total_items: int = 0
+
+
 @router.get("/status", response_model=CloudStatusResponse)
 def get_cloud_status(
     request: Request,
@@ -300,4 +316,95 @@ def get_cloud_price_history(
             )
             for h in history
         ],
+    )
+
+
+@router.post("/items/sync", response_model=ItemsSyncResponse)
+def sync_items_from_cloud(
+    request: Request,
+    repo: Repository = Depends(get_repository),
+) -> ItemsSyncResponse:
+    """
+    Sync item metadata from Supabase to local database.
+
+    Fetches all items or only items updated since last sync (delta sync).
+    Updates local SQLite items table with latest metadata.
+
+    Returns:
+        ItemsSyncResponse with success status, synced count, and last sync timestamp
+    """
+    sync_manager = get_sync_manager(request)
+
+    if sync_manager is None:
+        return ItemsSyncResponse(
+            success=False,
+            error="Cloud sync not available (Supabase SDK not installed)",
+        )
+
+    if not sync_manager.client.is_connected:
+        # Try to connect
+        if not sync_manager.client.connect():
+            return ItemsSyncResponse(
+                success=False,
+                error="Failed to connect to Supabase (check URL/Key configuration)",
+            )
+
+    try:
+        # Get last sync timestamp for delta sync
+        last_sync_str = repo.get_setting("items_last_sync")
+        since = None
+        if last_sync_str:
+            try:
+                since = datetime.fromisoformat(last_sync_str)
+            except ValueError:
+                # Invalid timestamp, do full sync
+                pass
+
+        # Fetch items from Supabase
+        items = sync_manager.client.fetch_items_from_cloud(since=since)
+
+        if not items:
+            # No new items, but still successful
+            return ItemsSyncResponse(
+                success=True,
+                synced_count=0,
+                last_sync=last_sync_str,
+            )
+
+        # Sync to local database
+        synced_count = repo.sync_items_from_cloud(items)
+
+        # Update last sync timestamp
+        now = datetime.utcnow().isoformat()
+        repo.set_setting("items_last_sync", now)
+
+        return ItemsSyncResponse(
+            success=True,
+            synced_count=synced_count,
+            last_sync=now,
+        )
+
+    except Exception as e:
+        return ItemsSyncResponse(
+            success=False,
+            error=f"Failed to sync items: {str(e)}",
+        )
+
+
+@router.get("/items/last-sync", response_model=ItemsLastSyncResponse)
+def get_items_last_sync(
+    repo: Repository = Depends(get_repository),
+) -> ItemsLastSyncResponse:
+    """
+    Get last item sync timestamp and total item count.
+
+    Returns:
+        ItemsLastSyncResponse with last sync timestamp (ISO 8601) and total items in local DB
+    """
+    last_sync = repo.get_setting("items_last_sync")
+    total_items = repo.get_item_count()
+
+    return ItemsLastSyncResponse(
+        last_sync=last_sync,
+        total_items=total_items,
     )

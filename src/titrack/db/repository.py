@@ -473,6 +473,84 @@ class Repository:
             (name_en, config_base_id),
         )
 
+    def sync_items_from_cloud(self, cloud_items: list[dict]) -> int:
+        """
+        Sync items from Supabase to local SQLite database.
+
+        Args:
+            cloud_items: List of item dicts from Supabase with fields:
+                - config_base_id (int, required)
+                - name_ko (str, optional)
+                - name_en (str, optional)
+                - name_cn (str, optional)
+                - type_ko (str, optional)
+                - type_en (str, optional)
+                - icon_url (str, optional)
+                - url_tlidb (str, optional)
+                - category (str, optional)
+                - subcategory (str, optional)
+                - tier (int, optional)
+                - tradeable (bool, optional)
+                - stackable (bool, optional)
+                - updated_at (str, optional)
+
+        Returns:
+            Number of items synced to local database
+
+        Note:
+            Uses batch UPSERT with transactions for performance.
+            Current schema only supports: config_base_id, name_en, name_cn, type_cn, icon_url, url_en, url_cn
+            Korean names (name_ko) are stored in items_ko.json, not SQLite (로컬 DB 스키마는 나중에 확장 예정)
+        """
+        if not cloud_items:
+            return 0
+
+        # Process items in batches of 100 for performance
+        batch_size = 100
+        synced_count = 0
+
+        conn = self.db.get_connection()
+        conn.execute("BEGIN IMMEDIATE")
+
+        try:
+            for i in range(0, len(cloud_items), batch_size):
+                batch = cloud_items[i : i + batch_size]
+
+                # Map Supabase fields to SQLite schema
+                # Note: name_ko는 items_ko.json에만 저장 (SQLite 스키마에 없음)
+                values = []
+                for item in batch:
+                    values.append(
+                        (
+                            item["config_base_id"],
+                            item.get("name_en"),  # English name
+                            item.get("name_cn"),  # Chinese name
+                            # type_cn: Use type_en if no type_ko (SQLite only has type_cn field)
+                            item.get("type_ko") or item.get("type_en"),
+                            item.get("icon_url"),
+                            item.get("url_tlidb"),  # Store tlidb URL in url_en field
+                            None,  # url_cn (not in Supabase schema)
+                        )
+                    )
+
+                conn.executemany(
+                    """INSERT OR REPLACE INTO items
+                       (config_base_id, name_en, name_cn, type_cn, icon_url, url_en, url_cn)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    values,
+                )
+
+                synced_count += len(batch)
+
+            conn.execute("COMMIT")
+            print(f"Cloud sync: Synced {synced_count} items to local database")
+            return synced_count
+
+        except Exception as e:
+            conn.execute("ROLLBACK")
+            print(f"Cloud sync: Failed to sync items to local database: {e}")
+            raise
+
     def _row_to_item(self, row) -> Item:
         return Item(
             config_base_id=row["config_base_id"],

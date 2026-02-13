@@ -1,8 +1,15 @@
 """Database schema - DDL statements for SQLite."""
 
-SCHEMA_VERSION = 4  # Bumped for session management support
+SCHEMA_VERSION = 5  # Bumped for Supabase items table alignment
 
 # Settings table - key/value configuration
+# Known keys:
+#   - schema_version: Database schema version (integer)
+#   - cloud_enabled: Cloud sync enabled (0/1)
+#   - cloud_upload_enabled: Cloud price upload enabled (0/1)
+#   - cloud_download_enabled: Cloud price download enabled (0/1)
+#   - cloud_last_price_sync: Last price sync timestamp (ISO 8601)
+#   - items_last_sync: Last items sync timestamp (ISO 8601)
 CREATE_SETTINGS = """
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,

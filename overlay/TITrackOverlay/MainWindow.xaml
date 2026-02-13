@@ -1,0 +1,14 @@
+<Window x:Class="TITrackOverlay.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        AllowsTransparency="True"
+        WindowStyle="None"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        ResizeMode="NoResize"
+        Width="940" Height="38"
+        Title="TITrack Overlay">
+    <Grid x:Name="ContentGrid" />
+</Window>
