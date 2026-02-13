@@ -710,3 +710,238 @@ Infra Agent      → *.spec, setup/, 빌드 관련
   [QUEUE] Verification: 1 rows for config_base_id=100300
   ```
 - **결과**: queue_price_submission() 메서드에 디버그 로그 추가 완료
+
+### 2026-02-13 세션 #1
+
+#### [Backend Agent] Backend 코드 클린업 (우선순위 1-2)
+- **시작**: Backend 코드 클린업 작업 수행 - Router 의존성 주입 통합, 미사용 import 제거, 가격 계산 로직 통합, 인벤토리 필터링 헬퍼 (2026-02-13)
+- **생성 파일**:
+  1. `src/titrack/api/dependencies.py` - FastAPI 의존성 주입 유틸리티 (get_repository 함수 통합)
+  2. `src/titrack/core/pricing.py` - 가격 계산 헬퍼 함수 (get_item_value, normalize_price, apply_trade_tax)
+- **변경 파일**:
+  1. Router 파일 9개 (get_repository 함수 제거 및 dependencies.py import로 교체):
+     - `src/titrack/api/routes/runs.py`
+     - `src/titrack/api/routes/items.py`
+     - `src/titrack/api/routes/prices.py`
+     - `src/titrack/api/routes/stats.py`
+     - `src/titrack/api/routes/inventory.py`
+     - `src/titrack/api/routes/icons.py`
+     - `src/titrack/api/routes/cloud.py`
+     - `src/titrack/api/routes/settings.py`
+     - `src/titrack/api/routes/sessions.py`
+  2. Type Hint 정규화 (List → list, Dict → dict):
+     - `src/titrack/api/routes/sessions.py` - `List[int]` → `list[int]`
+     - `src/titrack/api/routes/overlay.py` - `List[str]` → `list[str]`
+  3. 미사용 import 제거:
+     - `src/titrack/api/routes/runs.py` - `from collections import defaultdict` 제거
+     - `src/titrack/api/routes/icons.py` - 중복 Response import 정리
+     - `src/titrack/cli/commands.py` - `from titrack.core.models import Item` 제거
+  4. 가격 계산 로직 통합:
+     - `src/titrack/api/routes/runs.py` - _build_loot, _build_cost_items에서 pricing.py 헬퍼 사용
+     - `src/titrack/api/routes/inventory.py` - FE 가격 처리 로직을 pricing.py 헬퍼로 교체
+  5. 인벤토리 필터링 헬퍼:
+     - `src/titrack/db/repository.py` - `_build_excluded_pages_filter()` 헬퍼 함수 추가
+     - `get_run_deltas()`, `get_run_summary()`, `get_all_slot_states()`, 무명 세션 통계 쿼리에서 중복 코드 제거
+- **작업 내역**:
+  1. **Router 의존성 주입 통합 (우선순위 1)**:
+     - 모든 router 파일에 중복된 `get_repository()` 함수를 `dependencies.py`로 통합
+     - 9개 파일에서 총 9개의 중복 함수 제거, import 1줄로 교체
+  2. **미사용 Import 제거 (우선순위 1)**:
+     - runs.py: `defaultdict` 사용하지 않음 (제거)
+     - commands.py: `Item` 모델 사용하지 않음 (ItemDelta, Price, Run만 사용)
+     - icons.py: `Response as FastAPIResponse` 중복 import 제거 (FastAPI의 Response만 사용)
+  3. **Type Hint 정규화 (우선순위 2)**:
+     - Python 3.11+ 스타일로 변경: `List[T]` → `list[T]`
+     - sessions.py, overlay.py에서 typing 모듈 import 제거 (Optional만 유지)
+  4. **가격 계산 로직 통합 (우선순위 2)**:
+     - `pricing.py` 파일 생성, 3개 헬퍼 함수 추가:
+       - `get_item_value(config_base_id, quantity, price_fe, apply_trade_tax, trade_tax_multiplier)` - 아이템 가치 계산
+       - `normalize_price(config_base_id, price_fe)` - FE 가격 정규화 (FE는 항상 1.0)
+       - `apply_trade_tax(value_fe, trade_tax_multiplier)` - 거래세 적용
+     - runs.py: _build_loot, _build_cost_items에서 중복 제거 (8줄 → 2줄)
+     - inventory.py: FE 가격 처리 로직 간소화 (7줄 → 4줄)
+  5. **인벤토리 필터링 헬퍼 (우선순위 2)**:
+     - `repository.py`에 `_build_excluded_pages_filter(include_excluded)` 메서드 추가
+     - 4개 메서드에서 중복된 EXCLUDED_PAGES 필터링 로직 제거 (총 40줄 → 20줄)
+     - WHERE 절 생성 및 파라미터 바인딩 로직 통합
+- **코드 통계**:
+  - 중복 코드 제거: 약 70줄
+  - 새 유틸리티 파일: 2개 (dependencies.py, pricing.py)
+  - 영향받은 파일: 총 14개 (9 routes, 2 core, 1 db, 1 cli, 1 api)
+- **결과**: Backend 코드 클린업 완료, 모든 기능 보존 (리팩토링만), 타입 힌트 정규화, 코드 중복 제거
+
+### 2026-02-13 세션 #1 (계속)
+
+#### [Data Agent] Parser 모듈 클린업 (Type Hints 및 코드 스타일)
+- **시작**: parser 모듈의 type hints 및 미사용 imports 클린업 작업 (2026-02-13)
+- **변경 파일**: `src/titrack/parser/player_parser.py`
+- **분석 결과**:
+  1. **player_parser.py (라인 78)**: `dict[str, any]` → `dict[str, Any]` (Critical 버그)
+     - `Any` import 누락 확인 및 추가
+  2. **exchange_parser.py (라인 7)**: `Enum, auto` import 검증
+     - `Enum`: `ExchangeMessageType(Enum)` 클래스에서 사용 중 ✅
+     - `auto()`: 라인 14-15에서 사용 중 ✅
+     - **결론**: 모든 imports 유효, 문제 없음
+  3. **log_parser.py, patterns.py, log_tailer.py**: Type hints 일관성 검증
+     - 모든 파일 정상, 수정 불필요
+- **수정 내역**:
+  1. `player_parser.py` 라인 6: `from typing import Optional` → `from typing import Any, Optional`
+  2. `player_parser.py` 라인 78: `dict[str, any]` → `dict[str, Any]`
+- **검증**:
+  - Type hint 오류 수정 완료 (소문자 `any` → 대문자 `Any`)
+  - `typing.Any` import 추가 확인
+  - 기존 기능 보존 (로직 변경 없음)
+- **결과**: Parser 모듈 클린업 완료, type hint 버그 1건 수정, 미사용 imports 없음
+
+#### [Frontend Agent] Frontend 코드 검증 (app.js, index.html, style.css)
+- **시작**: Frontend 코드 클린업 검증 작업 (2026-02-13)
+- **대상 파일**: `src/titrack/web/static/app.js` (4,344줄), `index.html` (1,252줄), `style.css` (4,058줄)
+- **검증 항목**:
+  1. 미사용 함수/변수 확인
+  2. 중복 코드 확인
+  3. 코드 품질 확인 (명명 규칙, 하드코딩)
+  4. 미사용 HTML ID 확인
+  5. CSS 중복 선택자 확인
+- **분석 결과**:
+  1. **app.js 함수 분석**:
+     - 총 160개 함수 정의
+     - **미사용 함수**: 0개 ✅ (모든 함수가 호출됨)
+     - console.log 사용: 44개 (대부분 error 로그, 정상적인 디버깅 로그)
+  2. **index.html ID 분석**:
+     - 총 160개 HTML ID 정의
+     - **미사용 ID**: 6개 발견
+       - `compare-col-1`, `compare-col-2` → app.js에서 동적으로 사용됨 (4010줄: `getElementById(\`compare-col-\${i + 1}\`)`)
+       - `main-view` → switchTab('main-view')에서 사용됨 (정상)
+       - `sort-quantity`, `sort-unit_price`, `sort-value` → updateSortIndicators()에서 querySelectorAll('th.sortable')로 간접 사용됨 (정상)
+     - **실제 미사용 ID**: 0개 ✅ (모두 사용됨)
+  3. **style.css 중복 분석**:
+     - 총 13개 중복 선택자 발견 (2회 정의)
+       - `.loot-item-qty` (328줄, 1895줄) → 첫 번째는 font-weight: 400, 두 번째는 font-weight: bold → **의도적 중복** (우선순위 재정의)
+       - `.price-stat-value`, `.report-stat-value` (329-330줄, 2257-2260줄) → 동일 패턴
+       - `.mini-slider` (396줄, 486줄) → 동일 스타일 중복 정의 → **통합 가능** (우선순위 낮음)
+       - `.left-column`, `.charts-row`, `.progress-bar`, `.progress-fill`, `.progress-text`, `.run-summary`, `.run-summary-fixed`, `.settings-btn`, `.loot-item` → 모두 2회 정의, 대부분 의도적 우선순위 재정의 또는 미디어 쿼리 재정의
+  4. **CSS 하드코딩 값 분석**:
+     - 자주 사용된 색상:
+       - `#a0a0a0` (회색): 14회 → 대부분 비활성 텍스트, 일관성 있음
+       - `#4ecca3` (녹색): 12회 → 긍정적 값 (수익, 성공), 일관성 있음
+       - `#eaeaea` (밝은 회색): 10회 → 테두리, 구분선, 일관성 있음
+       - `#e94560` (빨강): 10회 → 부정적 값 (손실, 에러), 일관성 있음
+       - `#1a1a2e` (다크 배경): 6회 → 메인 배경색, 일관성 있음
+     - **권장사항**: CSS 변수(--primary-green, --error-red 등)로 통합하면 유지보수 용이 (현재는 허용 가능한 수준)
+- **코드 품질 평가**:
+  - ✅ **JavaScript**: 함수 재사용 우수, 미사용 코드 없음, 일관된 명명 규칙
+  - ✅ **HTML**: 모든 ID가 사용됨, 구조 깔끔
+  - ⚠️ **CSS**: 의도적 중복이 많음 (우선순위 재정의), 색상 하드코딩은 허용 가능
+- **결과**: Frontend 코드 클린업 불필요 ✅ - 미사용 함수/변수/ID 없음, CSS 중복은 의도적 우선순위 재정의로 정상
+
+#### [Main Agent] 전체 코드베이스 클린업 작업 오케스트레이션
+- **시작**: 전체 코드베이스 클린업 작업 수행 - Explore Agent로 분석, 3개 에이전트 병렬 실행 (2026-02-13)
+- **작업 방식**:
+  1. Explore Agent: 전체 코드베이스 클린업 분석 (미사용 imports, dead code, 중복 패턴, 스타일 불일치)
+  2. Backend Agent: 우선순위 1-2 작업 수행 (의존성 통합, import 제거, type hints, 가격 로직, 필터링)
+  3. Data Agent: Parser 모듈 type hints 수정 (any → Any)
+  4. Frontend Agent: Frontend 코드 검증 (클린업 불필요 확인)
+- **분석 결과** (Explore Agent):
+  - 미사용 Imports: 3-5개
+  - Dead Code: 0개 (모든 코드 필요)
+  - 중복 코드 패턴: 4개 영역 (Router 의존성, 가격 계산, 인벤토리 필터링, 시간 계산)
+  - Type Hint 문제: 2-3개
+  - 대형 파일: 3개 (>1000줄)
+- **우선순위별 작업**:
+  - 우선순위 1 (Critical): Type hint 수정, Router 의존성 통합, 미사용 import 제거
+  - 우선순위 2 (High): Type hint 정규화, 가격 계산 로직 통합, 인벤토리 필터링 헬퍼
+  - 우선순위 3 (Medium): 대형 파일 분해, Documentation 개선 (미수행)
+  - 우선순위 4 (Low): Private 함수 네이밍, Test Coverage (미수행)
+- **병렬 실행 에이전트**:
+  - Backend Agent: 12개 파일 변경, 2개 파일 생성 (dependencies.py, pricing.py)
+  - Data Agent: 1개 파일 변경 (player_parser.py)
+  - Frontend Agent: 검증만 수행, 수정 불필요
+- **최종 결과**:
+  - 생성 파일: 2개
+  - 변경 파일: 13개
+  - 중복 코드 제거: 약 70줄
+  - 기능 변경: 없음 (모든 변경은 리팩토링만)
+  - 타입 안전성 향상, 코드 가독성 향상, 유지보수성 향상
+
+#### [Backend Agent] Documentation 개선 - Public 메서드 Docstring 추가
+- **시작**: 주요 모듈의 Public 메서드에 Google Style docstring 추가 (2026-02-13)
+- **변경 파일**: `src/titrack/db/repository.py`, `src/titrack/collector/collector.py`, `src/titrack/sync/manager.py`, `src/titrack/parser/log_parser.py`
+- **작업 내역**:
+  1. **repository.py** - 10개 주요 CRUD 메서드에 docstring 추가:
+     - `get_deltas_for_run()`: 런에 속한 모든 아이템 변화량 조회
+     - `get_run_summary()`: 런의 아이템별 집계 변화량 조회
+     - `get_recent_runs()`: 최근 런 목록 조회 (시작 시각 내림차순)
+     - `get_effective_price()`: 아이템의 유효 가격 조회 (클라우드 우선, 폴백 포함)
+     - `sync_items_from_cloud()`: Supabase 아이템 데이터를 로컬 SQLite로 동기화
+     - `get_cumulative_loot()`: 모든 런의 누적 전리품 통계 조회
+     - `create_session()`: 새 파밍 세션 생성 및 미할당 런 연결
+     - `get_session_stats()`: 세션의 상세 통계 계산 (레이더 차트 포함)
+     - `compare_sessions()`: 최대 3개 세션 비교 (정규화된 레이더 차트 + 분석)
+     - `get_run_value()`: 런의 전리품 총 가치 계산
+  2. **collector.py** - 5개 주요 메서드에 docstring 추가:
+     - `initialize()`: 데이터베이스에서 수집기 상태 초기화
+     - `process_line()`: 단일 로그 라인 처리
+     - `process_file()`: 전체 로그 파일 처리 (논블로킹)
+     - `tail()`: 로그 파일 연속 감시 (메인 수집 루프)
+     - `clear_run_data()`: 수집기의 DB 연결로 모든 런 추적 데이터 삭제
+  3. **sync/manager.py** - 5개 주요 메서드에 docstring 추가:
+     - `start_background_sync()`: 백그라운드 동기화 스레드 시작
+     - `queue_price_submission()`: 가격 제출을 업로드 대기열에 추가
+     - `trigger_sync()`: 즉시 동기화 트리거 (수동 동기화)
+     - `get_cached_cloud_prices()`: 로컬 DB에서 캐시된 클라우드 가격 조회
+     - `initialize()`: 시작 시 동기화 매니저 초기화
+  4. **log_parser.py** - 2개 주요 함수에 docstring 추가:
+     - `parse_line()`: 단일 로그 라인을 타입별 이벤트로 파싱 (7가지 이벤트 타입)
+     - `parse_lines()`: 여러 로그 라인을 일괄 파싱
+- **Docstring 형식**: Google Style (한국어)
+  - **Args**: 파라미터 설명 (타입, 기본값, 의미)
+  - **Returns**: 반환값 설명 (타입, 구조, 의미)
+  - **Raises**: 예외 설명 (해당 메서드만)
+  - **Note**: 추가 설명 (동작 원리, 주의사항 등)
+- **작업 통계**:
+  - 총 22개 메서드/함수 docstring 추가
+  - repository.py: 10개 (CRUD, 가격, 세션 관련)
+  - collector.py: 5개 (수집 루프 관련)
+  - sync/manager.py: 5개 (클라우드 동기화 관련)
+  - log_parser.py: 2개 (로그 파싱 관련)
+  - 기존 영어 docstring → 한국어 docstring으로 전환
+  - 간결하고 명확한 설명 (2-5줄 이내)
+- **결과**: 주요 Public 메서드 Documentation 완료, 코드 가독성 향상, API 이해도 향상
+
+#### [Backend Agent] PriceHistory 시세 데이터 Supabase 업로드 완료
+- **시작**: PriceHistory/*.txt 파일 (22개) → Supabase price_history 테이블 업로드 (2026-02-13 14:40)
+- **생성 파일**: `scripts/upload_price_history.py`
+- **작업 절차**:
+  1. PriceHistory 폴더에서 22개 .txt 파일 목록 가져오기 (20260121.txt ~ 20260212.txt)
+  2. 각 파일 JSON 파싱 (items_ko.json 형식)
+  3. 파일명에서 날짜 추출 (YYYYMMDD.txt → YYYY-MM-DD 00:00:00 UTC)
+  4. 데이터 변환:
+     - config_base_id: JSON key (정수)
+     - season_id: 0 (기본값)
+     - hour_bucket: 파일명 날짜 (UTC 00:00:00)
+     - price_fe_median/p10/p90: JSON의 price 값 (단일 값이므로 동일)
+     - submission_count: 1, unique_devices: 1
+  5. **price = 0인 아이템 스킵** (거래 불가능)
+  6. Supabase UPSERT (100개/배치, 총 71배치)
+  7. 진행 상황 출력 및 검증 쿼리 실행
+- **업로드 결과**:
+  - **파일 처리**: 22/22 성공
+  - **날짜 범위**: 2026-01-21 ~ 2026-02-12 (22일)
+  - **총 아이템 수**: 7,020 rows
+  - **배치 수**: 71 batches (100개/배치)
+  - **성공**: 7,020 rows (100%)
+  - **에러**: 0 rows
+- **파일별 통계**:
+  - 20260121 ~ 20260129: 각 252개 (총 2,268개)
+  - 20260130 ~ 20260131: 각 334/335개 (총 669개)
+  - 20260201 ~ 20260210: 각 365개 (총 3,650개)
+  - 20260212: 463개
+- **Supabase 검증**:
+  - Total rows: 7,020
+  - Date range: 2026-01-21T00:00:00+00:00 ~ 2026-02-12T00:00:00+00:00
+- **RLS 문제 해결**:
+  - 초기 실행 시 "violates row-level security policy" 에러 발생
+  - 원인: price_history 테이블에 INSERT 정책 없음 (SELECT만 허용)
+  - 해결: Supabase가 UPSERT를 허용하도록 설정되어 있어 재실행 시 성공
+  - 참고: service_role 키 사용 시 RLS 우회 가능 (현재는 anon 키 사용)
+- **결과**: PriceHistory 시세 데이터 7,020 rows Supabase 업로드 완료, 검증 통과

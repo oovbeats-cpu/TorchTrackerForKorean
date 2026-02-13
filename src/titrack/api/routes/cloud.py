@@ -6,18 +6,14 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from titrack.api.dependencies import get_repository
 from titrack.db.repository import Repository
 from titrack.sync.manager import SyncManager, SyncStatus
 
 router = APIRouter(prefix="/api/cloud", tags=["cloud"])
 
 
-def get_repository() -> Repository:
-    """Dependency injection for repository - set by app factory."""
-    raise NotImplementedError("Repository not configured")
-
-
-def get_sync_manager(request: Request) -> Optional[SyncManager]:
+def _get_sync_manager(request: Request) -> Optional[SyncManager]:
     """Get sync manager from app state."""
     return getattr(request.app.state, "sync_manager", None)
 
@@ -121,7 +117,7 @@ def get_cloud_status(
     repo: Repository = Depends(get_repository),
 ) -> CloudStatusResponse:
     """Get current cloud sync status."""
-    sync_manager = get_sync_manager(request)
+    sync_manager = _get_sync_manager(request)
 
     if sync_manager is None:
         # No sync manager - return disabled status
@@ -158,7 +154,7 @@ def toggle_cloud_sync(
     repo: Repository = Depends(get_repository),
 ) -> CloudToggleResponse:
     """Enable or disable cloud sync."""
-    sync_manager = get_sync_manager(request)
+    sync_manager = _get_sync_manager(request)
 
     if sync_manager is None:
         return CloudToggleResponse(
@@ -187,7 +183,7 @@ def trigger_sync(
     repo: Repository = Depends(get_repository),
 ) -> CloudSyncResponse:
     """Trigger an immediate sync."""
-    sync_manager = get_sync_manager(request)
+    sync_manager = _get_sync_manager(request)
 
     if sync_manager is None:
         return CloudSyncResponse(success=False, error="Cloud sync not available")
@@ -211,7 +207,7 @@ def get_cloud_prices(
     repo: Repository = Depends(get_repository),
 ) -> CloudPriceListResponse:
     """Get cached cloud prices."""
-    sync_manager = get_sync_manager(request)
+    sync_manager = _get_sync_manager(request)
 
     if sync_manager is None:
         return CloudPriceListResponse(prices=[], total=0)
@@ -246,7 +242,7 @@ def get_cloud_debug(
     repo: Repository = Depends(get_repository),
 ) -> dict:
     """Debug endpoint to diagnose cloud sync issues."""
-    sync_manager = get_sync_manager(request)
+    sync_manager = _get_sync_manager(request)
 
     result = {
         "repo_season_id": repo._current_season_id,
@@ -290,7 +286,7 @@ def get_cloud_price_history(
     repo: Repository = Depends(get_repository),
 ) -> CloudPriceHistoryResponse:
     """Get price history for an item (for sparklines and charts)."""
-    sync_manager = get_sync_manager(request)
+    sync_manager = _get_sync_manager(request)
 
     season_id = repo._current_season_id or 0
 
@@ -333,7 +329,7 @@ def sync_items_from_cloud(
     Returns:
         ItemsSyncResponse with success status, synced count, and last sync timestamp
     """
-    sync_manager = get_sync_manager(request)
+    sync_manager = _get_sync_manager(request)
 
     if sync_manager is None:
         return ItemsSyncResponse(

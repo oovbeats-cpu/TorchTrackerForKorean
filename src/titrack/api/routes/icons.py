@@ -5,16 +5,12 @@ import urllib.error
 from typing import Optional
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Response
-from fastapi.responses import Response as FastAPIResponse
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 
+from titrack.api.dependencies import get_repository
 from titrack.db.repository import Repository
 from titrack.data.icon_urls import get_icon_url
-
-
-def get_repository() -> Repository:
-    """Dependency injection for repository - set by app factory."""
-    raise NotImplementedError("Repository not configured")
 
 router = APIRouter(prefix="/api/icons", tags=["icons"])
 
@@ -40,7 +36,7 @@ CDN_HEADERS = {
 }
 
 
-def is_valid_domain(url: str) -> bool:
+def _is_valid_domain(url: str) -> bool:
     """Check if URL is from allowed domain."""
     try:
         parsed = urlparse(url)
@@ -49,7 +45,7 @@ def is_valid_domain(url: str) -> bool:
         return False
 
 
-def is_valid_image(data: bytes) -> bool:
+def _is_valid_image(data: bytes) -> bool:
     """Verify image by checking magic bytes."""
     if not data or len(data) < 8:
         return False
@@ -59,7 +55,7 @@ def is_valid_image(data: bytes) -> bool:
     return False
 
 
-def fetch_icon(url: str) -> Optional[bytes]:
+def _fetch_icon(url: str) -> Optional[bytes]:
     """Fetch icon from CDN with security validation."""
     if url in _failed_urls:
         return None
@@ -67,7 +63,7 @@ def fetch_icon(url: str) -> Optional[bytes]:
     if url in _icon_cache:
         return _icon_cache[url]
 
-    if not is_valid_domain(url):
+    if not _is_valid_domain(url):
         _failed_urls.add(url)
         return None
 
@@ -78,21 +74,21 @@ def fetch_icon(url: str) -> Optional[bytes]:
             if content_type and content_type not in ALLOWED_CONTENT_TYPES:
                 _failed_urls.add(url)
                 return None
-            
+
             content_length = resp.headers.get("Content-Length")
             if content_length and int(content_length) > MAX_ICON_SIZE:
                 _failed_urls.add(url)
                 return None
-            
+
             data = resp.read(MAX_ICON_SIZE + 1)
             if len(data) > MAX_ICON_SIZE:
                 _failed_urls.add(url)
                 return None
-            
-            if not is_valid_image(data):
+
+            if not _is_valid_image(data):
                 _failed_urls.add(url)
                 return None
-            
+
             _icon_cache[url] = data
             return data
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, ValueError):
@@ -120,7 +116,7 @@ def get_icon(config_base_id: int, repo: Repository = Depends(get_repository)) ->
     if not icon_url:
         raise HTTPException(status_code=404, detail="No icon available")
 
-    icon_data = fetch_icon(icon_url)
+    icon_data = _fetch_icon(icon_url)
     if icon_data is None:
         raise HTTPException(status_code=404, detail="Icon not available from CDN")
 

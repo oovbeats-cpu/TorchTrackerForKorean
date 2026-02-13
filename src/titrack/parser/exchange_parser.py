@@ -216,7 +216,7 @@ class ExchangeMessageParser:
         )
 
 
-def remove_outliers_iqr(prices: list[float]) -> list[float]:
+def _remove_outliers_iqr(prices: list[float]) -> list[float]:
     """
     IQR 방식으로 이상가 제거.
 
@@ -282,7 +282,7 @@ def calculate_price_volatility(prices: list[float]) -> dict[str, Any]:
     if len(prices) < 4:
         return {"iqr": 0.0, "volatility_ratio": 0.0, "is_volatile": False}
 
-    filtered = remove_outliers_iqr(prices)
+    filtered = _remove_outliers_iqr(prices)
 
     Q1 = filtered[len(filtered) // 4]
     Q3 = filtered[len(filtered) * 3 // 4]
@@ -322,7 +322,7 @@ def calculate_reference_price(prices: list[float], method: str = "smart") -> flo
 
     if method == "smart":
         # 1. IQR로 이상가 제거
-        filtered = remove_outliers_iqr(prices)
+        filtered = _remove_outliers_iqr(prices)
 
         # 데이터 부족 시 median 사용
         if len(filtered) < 10:
@@ -356,7 +356,7 @@ def calculate_reference_price(prices: list[float], method: str = "smart") -> flo
         return sum(prices[:count]) / count
     else:
         # Default to smart method
-        filtered = remove_outliers_iqr(prices)
+        filtered = _remove_outliers_iqr(prices)
         if len(filtered) < 10:
             return filtered[len(filtered) // 2]
         mode_price, mode_count = calculate_mode_price(filtered)

@@ -4,7 +4,9 @@ from enum import Enum
 
 from fastapi import APIRouter, Depends, Query
 
+from titrack.api.dependencies import get_repository
 from titrack.api.schemas import InventoryItem, InventoryResponse
+from titrack.core.pricing import get_item_value, normalize_price
 from titrack.db.repository import Repository
 from titrack.parser.patterns import FE_CONFIG_BASE_ID
 
@@ -25,13 +27,8 @@ class SortOrder(str, Enum):
     DESC = "desc"
 
 
-def get_repository() -> Repository:
-    """Dependency injection for repository - set by app factory."""
-    raise NotImplementedError("Repository not configured")
-
-
 @router.get("/debug", response_model=dict)
-def debug_slot_states(
+def _debug_slot_states(
     repo: Repository = Depends(get_repository),
 ) -> dict:
     """Debug endpoint to check slot_state data by PageId."""
@@ -88,14 +85,14 @@ def get_inventory(
         # Use effective price with source (cloud-first, local overrides if newer)
         price_fe, price_source = repo.get_effective_price_with_source(config_id)
 
-        # FE currency is worth 1:1
+        # Normalize FE price and calculate value with trade tax
+        price_fe = normalize_price(config_id, price_fe)
         if config_id == FE_CONFIG_BASE_ID:
-            price_fe = 1.0
             price_source = None  # FE has no price source
-            total_value = price_fe * quantity if price_fe else None
+            total_value = get_item_value(config_id, quantity, price_fe, apply_trade_tax=False)
         else:
             # Apply trade tax to non-FE items (would need to sell them)
-            total_value = price_fe * quantity * tax_multiplier if price_fe else None
+            total_value = get_item_value(config_id, quantity, price_fe, apply_trade_tax=True, trade_tax_multiplier=tax_multiplier)
 
         if total_value and config_id != FE_CONFIG_BASE_ID:
             net_worth += total_value

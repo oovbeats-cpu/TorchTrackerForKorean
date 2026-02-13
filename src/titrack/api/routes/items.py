@@ -2,15 +2,11 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from titrack.api.dependencies import get_repository
 from titrack.api.schemas import ItemListResponse, ItemResponse, ItemUpdateRequest
 from titrack.db.repository import Repository
 
 router = APIRouter(prefix="/api/items", tags=["items"])
-
-
-def get_repository() -> Repository:
-    """Dependency injection for repository - set by app factory."""
-    raise NotImplementedError("Repository not configured")
 
 
 @router.get("", response_model=ItemListResponse)

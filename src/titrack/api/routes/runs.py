@@ -1,6 +1,5 @@
 """Runs API routes."""
 
-from collections import defaultdict
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -8,6 +7,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from datetime import date
 
+from titrack.api.dependencies import get_repository
 from titrack.api.schemas import (
     ActiveRunResponse,
     LootItem,
@@ -19,6 +19,7 @@ from titrack.api.schemas import (
     RunStatsResponse,
 )
 from titrack.core.models import Run
+from titrack.core.pricing import get_item_value, normalize_price
 from titrack.data.zones import get_zone_display_name
 from titrack.db.repository import Repository
 from titrack.parser.patterns import FE_CONFIG_BASE_ID
@@ -38,11 +39,6 @@ class ResetResponse(BaseModel):
     message: str
 
 
-def get_repository() -> Repository:
-    """Dependency injection for repository - set by app factory."""
-    raise NotImplementedError("Repository not configured")
-
-
 def _build_loot(summary: dict[int, int], repo: Repository) -> list[LootItem]:
     """Build loot items from a run summary."""
     loot = []
@@ -51,12 +47,8 @@ def _build_loot(summary: dict[int, int], repo: Repository) -> list[LootItem]:
             item = repo.get_item(config_id)
 
             # Use effective price (cloud-first, local overrides if newer)
-            item_price_fe = repo.get_effective_price(config_id)
-
-            # FE currency is worth 1:1
-            if config_id == FE_CONFIG_BASE_ID:
-                item_price_fe = 1.0
-            item_total = item_price_fe * quantity if item_price_fe else None
+            item_price_fe = normalize_price(config_id, repo.get_effective_price(config_id))
+            item_total = get_item_value(config_id, quantity, item_price_fe, apply_trade_tax=False)
             loot.append(
                 LootItem(
                     config_base_id=config_id,
@@ -76,10 +68,10 @@ def _build_cost_items(cost_summary: dict[int, int], repo: Repository) -> list[Lo
     for config_id, quantity in cost_summary.items():
         if quantity != 0:
             item = repo.get_item(config_id)
-            item_price_fe = repo.get_effective_price(config_id)
+            item_price_fe = normalize_price(config_id, repo.get_effective_price(config_id))
             # Use absolute quantity for display (costs are negative)
             abs_qty = abs(quantity)
-            item_total = item_price_fe * abs_qty if item_price_fe else None
+            item_total = get_item_value(config_id, abs_qty, item_price_fe, apply_trade_tax=False)
             cost_items.append(
                 LootItem(
                     config_base_id=config_id,

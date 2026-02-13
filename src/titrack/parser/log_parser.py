@@ -24,13 +24,23 @@ from titrack.parser.player_parser import parse_player_line
 
 def parse_line(line: str) -> ParsedEvent:
     """
-    Parse a single log line into a typed event.
+    단일 로그 라인을 타입별 이벤트로 파싱.
+
+    정규식 패턴 매칭으로 로그 라인 타입 식별 후 적절한 이벤트 객체 생성.
+    BagMgr, ItemChange, Level, Player, View, Contract 등 7가지 이벤트 타입 지원.
 
     Args:
-        line: Raw log line (may include newline)
+        line: 원본 로그 라인 (개행 문자 포함 가능)
 
     Returns:
-        ParsedEvent if the line matches a known pattern, None otherwise
+        ParsedEvent 객체 (매칭 실패 시 None)
+        - ParsedBagEvent: 인벤토리 변경 (획득/소비/정렬)
+        - ParsedContextMarker: 컨텍스트 마커 (PickItems, Spv3Open 등)
+        - ParsedLevelEvent: 존 전환 (맵 진입/퇴장)
+        - ParsedLevelIdEvent: 레벨 메타데이터 (LevelId, LevelType, LevelUid)
+        - ParsedPlayerDataEvent: 플레이어 정보 (캐릭터 변경 감지)
+        - ParsedViewEvent: UI 뷰 변경 (자동 일시정지용)
+        - ParsedContractSettingEvent: 계약 설정 변경
     """
     line = line.rstrip("\r\n")
 
@@ -123,13 +133,13 @@ def parse_line(line: str) -> ParsedEvent:
 
 def parse_lines(lines: list[str]) -> list[ParsedEvent]:
     """
-    Parse multiple log lines.
+    여러 로그 라인을 일괄 파싱.
 
     Args:
-        lines: List of raw log lines
+        lines: 원본 로그 라인 리스트
 
     Returns:
-        List of parsed events (None values filtered out)
+        파싱된 이벤트 리스트 (None 값 필터링됨)
     """
     events = [parse_line(line) for line in lines]
     return [e for e in events if e is not None]

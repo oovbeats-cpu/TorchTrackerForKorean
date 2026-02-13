@@ -3,16 +3,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from titrack.api.dependencies import get_repository
 from titrack.config.settings import validate_game_directory
 from titrack.config.preferences import update_preference
 from titrack.db.repository import Repository
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
-
-
-def get_repository() -> Repository:
-    """Dependency injection for repository - set by app factory."""
-    raise NotImplementedError("Repository not configured")
 
 
 # Whitelist of settings that can be read/written via API

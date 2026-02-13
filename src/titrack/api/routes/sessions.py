@@ -1,10 +1,11 @@
 """Sessions API routes."""
 
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from titrack.api.dependencies import get_repository
 from titrack.db.repository import Repository
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
@@ -25,12 +26,7 @@ class UpdateSessionNameRequest(BaseModel):
 class CompareSessionsRequest(BaseModel):
     """Request to compare sessions."""
 
-    session_ids: List[int]  # 2~3개
-
-
-def get_repository() -> Repository:
-    """Dependency injection for repository - set by app factory."""
-    raise NotImplementedError("Repository not configured")
+    session_ids: list[int]  # 2~3개
 
 
 @router.post("")

@@ -6,16 +6,12 @@ from fastapi import APIRouter, Depends, Query
 
 from pydantic import BaseModel
 
+from titrack.api.dependencies import get_repository
 from titrack.data.zones import get_zone_display_name
 from titrack.db.repository import Repository
 from titrack.parser.patterns import FE_CONFIG_BASE_ID
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
-
-
-def get_repository() -> Repository:
-    """Dependency injection for repository - set by app factory."""
-    raise NotImplementedError("Repository not configured")
 
 
 class TimeSeriesPoint(BaseModel):

@@ -6,16 +6,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
+from titrack.api.dependencies import get_repository
 from titrack.api.schemas import PriceListResponse, PriceResponse, PriceUpdateRequest
 from titrack.core.models import Price
 from titrack.db.repository import Repository
 
 router = APIRouter(prefix="/api/prices", tags=["prices"])
-
-
-def get_repository() -> Repository:
-    """Dependency injection for repository - set by app factory."""
-    raise NotImplementedError("Repository not configured")
 
 
 @router.get("/exchange", response_model=list[int])

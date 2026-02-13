@@ -3,7 +3,7 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 
 @dataclass
@@ -75,7 +75,7 @@ HERO_NAMES = {
 }
 
 
-def parse_player_line(line: str) -> dict[str, any]:
+def parse_player_line(line: str) -> dict[str, Any]:
     """
     Parse a single line for player data fields.
 

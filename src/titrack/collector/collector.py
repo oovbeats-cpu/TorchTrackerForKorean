@@ -148,9 +148,10 @@ class Collector:
 
     def initialize(self) -> None:
         """
-        Initialize collector state from database.
+        데이터베이스에서 수집기 상태 초기화.
 
-        Loads slot states, active run, and log position.
+        슬롯 상태, 활성 런, 로그 파일 위치 로드.
+        첫 실행 시 로그 파일 끝으로 이동 (이전 세션 이벤트 건너뛰기).
         """
         # Load slot states (filtered by player_id if set)
         states = self.repository.get_all_slot_states(player_id=self._player_id)
@@ -257,13 +258,17 @@ class Collector:
 
     def clear_run_data(self) -> int:
         """
-        Clear all run tracking data using the collector's database connection.
+        수집기의 DB 연결로 모든 런 추적 데이터 삭제.
 
-        This ensures data is cleared in the same connection the collector uses.
-        Also updates log position to current end so old events aren't re-parsed.
+        동일 연결 사용으로 데이터 일관성 보장.
+        로그 위치를 현재 위치로 업데이트하여 이전 이벤트 재파싱 방지.
+        TimeTracker의 수술(Surgery) 통계도 리셋.
 
         Returns:
-            Number of runs deleted.
+            삭제된 런 수
+
+        Note:
+            슬롯 상태, 아이템, 가격, 설정은 보존됨 (런 데이터만 삭제)
         """
         # Clear database
         runs_deleted = self.repository.clear_run_data()
@@ -287,11 +292,14 @@ class Collector:
 
     def process_line(self, line: str, timestamp: Optional[datetime] = None) -> None:
         """
-        Process a single log line.
+        단일 로그 라인 처리.
+
+        거래소 메시지 파싱 우선 시도 후 표준 이벤트 파싱.
+        파싱된 이벤트 타입에 따라 적절한 핸들러 호출.
 
         Args:
-            line: Raw log line
-            timestamp: Event timestamp (defaults to now)
+            line: 원본 로그 라인 (개행 문자 포함 가능)
+            timestamp: 이벤트 타임스탬프 (기본값: 현재 시각)
         """
         timestamp = timestamp or datetime.now()
 
@@ -621,13 +629,13 @@ class Collector:
 
     def process_file(self, from_beginning: bool = False) -> int:
         """
-        Process the entire log file (non-blocking).
+        전체 로그 파일 처리 (논블로킹).
 
         Args:
-            from_beginning: If True, read from start; otherwise from last position
+            from_beginning: True일 경우 파일 시작부터 읽기, False일 경우 저장된 위치부터
 
         Returns:
-            Number of lines processed
+            처리된 라인 수
         """
         if from_beginning:
             self.tailer.reset()
@@ -648,10 +656,16 @@ class Collector:
 
     def tail(self, poll_interval: float = 0.5) -> None:
         """
-        Continuously tail the log file.
+        로그 파일 연속 감시 (메인 수집 루프).
+
+        파일 변경 감지 → 새 라인 처리 → 위치 저장 반복.
+        연속 에러 5회 시 예외 발생 (재시작 필요).
 
         Args:
-            poll_interval: Seconds between file checks
+            poll_interval: 파일 체크 간격 (초, 기본값 0.5)
+
+        Raises:
+            Exception: 연속 에러 5회 이상 시
         """
         self._running = True
         consecutive_errors = 0

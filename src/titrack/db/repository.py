@@ -37,6 +37,24 @@ class Repository:
         """Return True if a player context has been set."""
         return self._current_player_id is not None
 
+    def _build_excluded_pages_filter(self, include_excluded: bool) -> tuple[str, list]:
+        """Build WHERE clause fragment and params for excluded pages filtering.
+
+        Args:
+            include_excluded: If True, return empty filter (include all pages)
+
+        Returns:
+            Tuple of (where_clause, params) where:
+            - where_clause: SQL fragment like "page_id NOT IN (?, ?)" or ""
+            - params: List of parameters for the placeholders
+        """
+        if include_excluded or not EXCLUDED_PAGES:
+            return ("", [])
+
+        placeholders = ",".join("?" * len(EXCLUDED_PAGES))
+        where_clause = f"page_id NOT IN ({placeholders})"
+        return (where_clause, list(EXCLUDED_PAGES))
+
     # --- Settings ---
 
     def get_setting(self, key: str) -> Optional[str]:
@@ -115,7 +133,17 @@ class Repository:
         return self._row_to_run(row)
 
     def get_recent_runs(self, limit: int = 20, season_id: Optional[int] = None, player_id: Optional[str] = None) -> list[Run]:
-        """Get recent runs ordered by start time descending, optionally filtered by season/player."""
+        """
+        최근 런 목록 조회 (시작 시각 내림차순).
+
+        Args:
+            limit: 조회 개수 제한 (기본값 20)
+            season_id: 시즌 필터 (None일 경우 컨텍스트 사용)
+            player_id: 플레이어 필터 (None일 경우 컨텍스트 사용)
+
+        Returns:
+            런 리스트 (세션 미할당 런만, 최신순)
+        """
         # Use provided values or fall back to context
         season_id = season_id if season_id is not None else self._current_season_id
         player_id = player_id if player_id is not None else self._current_player_id
@@ -220,57 +248,55 @@ class Repository:
 
     def get_deltas_for_run(self, run_id: int, include_excluded: bool = False) -> list[ItemDelta]:
         """
-        Get all deltas for a run.
+        런에 속한 모든 아이템 변화량 조회.
 
         Args:
-            run_id: The run ID to get deltas for.
-            include_excluded: If True, include excluded pages (e.g., Gear).
-                              Default False filters out excluded pages.
+            run_id: 조회할 런 ID
+            include_excluded: True일 경우 제외 페이지(장비 탭 등) 포함. 기본값 False
+
+        Returns:
+            아이템 변화량 리스트 (timestamp 오름차순 정렬)
         """
-        if include_excluded or not EXCLUDED_PAGES:
-            rows = self.db.fetchall(
-                "SELECT * FROM item_deltas WHERE run_id = ? ORDER BY timestamp",
-                (run_id,),
-            )
+        where_filter, filter_params = self._build_excluded_pages_filter(include_excluded)
+
+        if where_filter:
+            query = f"SELECT * FROM item_deltas WHERE run_id = ? AND {where_filter} ORDER BY timestamp"
+            params = [run_id] + filter_params
         else:
-            placeholders = ",".join("?" * len(EXCLUDED_PAGES))
-            rows = self.db.fetchall(
-                f"SELECT * FROM item_deltas WHERE run_id = ? AND page_id NOT IN ({placeholders}) ORDER BY timestamp",
-                (run_id, *EXCLUDED_PAGES),
-            )
+            query = "SELECT * FROM item_deltas WHERE run_id = ? ORDER BY timestamp"
+            params = [run_id]
+
+        rows = self.db.fetchall(query, tuple(params))
         return [self._row_to_delta(row) for row in rows]
 
     def get_run_summary(self, run_id: int, include_excluded: bool = False) -> dict[int, int]:
         """
-        Get aggregated delta per item for a run (excludes map costs).
+        런의 아이템별 집계 변화량 조회 (맵 비용 제외).
 
         Args:
-            run_id: The run ID to get summary for.
-            include_excluded: If True, include excluded pages (e.g., Gear).
-                              Default False filters out excluded pages.
+            run_id: 조회할 런 ID
+            include_excluded: True일 경우 제외 페이지 포함. 기본값 False
 
         Returns:
-            Dict mapping config_base_id -> total delta
+            아이템 ID → 총 변화량 매핑 딕셔너리
         """
         # Always exclude Spv3Open (map costs) from loot summary
-        if include_excluded or not EXCLUDED_PAGES:
-            rows = self.db.fetchall(
-                """SELECT config_base_id, SUM(delta) as total_delta
-                   FROM item_deltas
-                   WHERE run_id = ? AND (proto_name IS NULL OR proto_name != 'Spv3Open')
-                   GROUP BY config_base_id""",
-                (run_id,),
-            )
+        where_filter, filter_params = self._build_excluded_pages_filter(include_excluded)
+
+        base_where = "run_id = ? AND (proto_name IS NULL OR proto_name != 'Spv3Open')"
+        if where_filter:
+            where_clause = f"{base_where} AND {where_filter}"
+            params = [run_id] + filter_params
         else:
-            placeholders = ",".join("?" * len(EXCLUDED_PAGES))
-            rows = self.db.fetchall(
-                f"""SELECT config_base_id, SUM(delta) as total_delta
+            where_clause = base_where
+            params = [run_id]
+
+        query = f"""SELECT config_base_id, SUM(delta) as total_delta
                    FROM item_deltas
-                   WHERE run_id = ? AND page_id NOT IN ({placeholders})
-                   AND (proto_name IS NULL OR proto_name != 'Spv3Open')
-                   GROUP BY config_base_id""",
-                (run_id, *EXCLUDED_PAGES),
-            )
+                   WHERE {where_clause}
+                   GROUP BY config_base_id"""
+
+        rows = self.db.fetchall(query, tuple(params))
         return {row["config_base_id"]: row["total_delta"] for row in rows}
 
     def _row_to_delta(self, row) -> ItemDelta:
@@ -327,27 +353,25 @@ class Repository:
             return []
 
         player_id_filter = player_id if player_id else ""
+        where_filter, filter_params = self._build_excluded_pages_filter(include_excluded)
 
-        if include_excluded or not EXCLUDED_PAGES:
-            if player_id is not None:
-                rows = self.db.fetchall(
-                    "SELECT * FROM slot_state WHERE player_id = ?",
-                    (player_id_filter,),
-                )
+        # Build query based on player_id and excluded pages
+        if player_id is not None:
+            if where_filter:
+                query = f"SELECT * FROM slot_state WHERE player_id = ? AND {where_filter}"
+                params = [player_id_filter] + filter_params
             else:
-                rows = self.db.fetchall("SELECT * FROM slot_state")
+                query = "SELECT * FROM slot_state WHERE player_id = ?"
+                params = [player_id_filter]
         else:
-            placeholders = ",".join("?" * len(EXCLUDED_PAGES))
-            if player_id is not None:
-                rows = self.db.fetchall(
-                    f"SELECT * FROM slot_state WHERE player_id = ? AND page_id NOT IN ({placeholders})",
-                    (player_id_filter, *EXCLUDED_PAGES),
-                )
+            if where_filter:
+                query = f"SELECT * FROM slot_state WHERE {where_filter}"
+                params = filter_params
             else:
-                rows = self.db.fetchall(
-                    f"SELECT * FROM slot_state WHERE page_id NOT IN ({placeholders})",
-                    tuple(EXCLUDED_PAGES),
-                )
+                query = "SELECT * FROM slot_state"
+                params = []
+
+        rows = self.db.fetchall(query, tuple(params))
         return [self._row_to_slot_state(row) for row in rows]
 
     def get_slot_state(self, page_id: int, slot_id: int, player_id: Optional[str] = None) -> Optional[SlotState]:
@@ -475,32 +499,24 @@ class Repository:
 
     def sync_items_from_cloud(self, cloud_items: list[dict]) -> int:
         """
-        Sync items from Supabase to local SQLite database.
+        Supabase 아이템 데이터를 로컬 SQLite로 동기화.
+
+        배치 UPSERT (100개/배치) + 트랜잭션으로 성능 최적화.
+        현재 스키마는 name_ko 미지원 (items_ko.json 사용, 향후 확장 예정).
 
         Args:
-            cloud_items: List of item dicts from Supabase with fields:
-                - config_base_id (int, required)
-                - name_ko (str, optional)
-                - name_en (str, optional)
-                - name_cn (str, optional)
-                - type_ko (str, optional)
-                - type_en (str, optional)
-                - icon_url (str, optional)
-                - url_tlidb (str, optional)
-                - category (str, optional)
-                - subcategory (str, optional)
-                - tier (int, optional)
-                - tradeable (bool, optional)
-                - stackable (bool, optional)
-                - updated_at (str, optional)
+            cloud_items: Supabase 아이템 딕셔너리 리스트
+                - config_base_id (int, 필수)
+                - name_ko, name_en, name_cn (str, 선택)
+                - type_ko, type_en (str, 선택)
+                - icon_url, url_tlidb (str, 선택)
+                - category, subcategory, tier, tradeable, stackable, updated_at (선택)
 
         Returns:
-            Number of items synced to local database
+            동기화된 아이템 수
 
-        Note:
-            Uses batch UPSERT with transactions for performance.
-            Current schema only supports: config_base_id, name_en, name_cn, type_cn, icon_url, url_en, url_cn
-            Korean names (name_ko) are stored in items_ko.json, not SQLite (로컬 DB 스키마는 나중에 확장 예정)
+        Raises:
+            Exception: DB 쓰기 실패 시 (롤백 후 재발생)
         """
         if not cloud_items:
             return 0
@@ -616,19 +632,20 @@ class Repository:
 
     def get_effective_price(self, config_base_id: int, season_id: Optional[int] = None) -> Optional[float]:
         """
-        Get the effective price for an item using cloud-first logic with fallback.
+        아이템의 유효 가격 조회 (클라우드 우선, 폴백 포함).
 
-        Priority (based on timestamp comparison):
-        1. Exchange price (user searched in AH) - wins if newer than cloud
-        2. Cloud price (community aggregate) - wins if newer than exchange
-        3. Local price (other sources) - wins if newer than cloud
-        4. Fallback price from user-provided file if cloud and local are unavailable
+        우선순위 (타임스탬프 비교 기반):
+        1. Exchange 가격 (거래소 검색) - 클라우드보다 최신일 경우 우선
+        2. Cloud 가격 (커뮤니티 집계) - Exchange보다 최신일 경우 우선
+        3. Local 가격 (기타 소스) - Cloud보다 최신일 경우 우선
+        4. Fallback 가격 (하드코딩) - 클라우드/로컬 모두 없을 경우
 
-        This allows:
-        - Hourly refresh: exchange prices remain if user searched recently
-        - Daily midnight refresh: cloud prices take precedence after sync updates timestamps
+        Args:
+            config_base_id: 아이템 ID
+            season_id: 시즌 필터 (None일 경우 컨텍스트 사용)
 
-        Returns the price in FE, or None if no price available.
+        Returns:
+            FE 가격 (float), 가격 없을 경우 None
         """
         from datetime import datetime
 
@@ -910,13 +927,16 @@ class Repository:
 
     def get_run_value(self, run_id: int) -> tuple[int, float]:
         """
-        Calculate total value of a run's loot.
+        런의 전리품 총 가치 계산.
+
+        Args:
+            run_id: 조회할 런 ID
 
         Returns:
-            Tuple of (raw_fe_gained, total_value_fe)
-            - raw_fe_gained: Just the FE currency picked up
-            - total_value_fe: FE + value of other items based on prices
-              (with trade tax applied to non-FE items if enabled)
+            튜플 (raw_fe_gained, total_value_fe):
+            - raw_fe_gained: 획득한 FE 화폐만 (정수)
+            - total_value_fe: FE + 기타 아이템 가치 합계 (float)
+              (비-FE 아이템에는 거래세 적용 시 0.875 배율)
         """
         from titrack.parser.patterns import FE_CONFIG_BASE_ID
 
@@ -1062,17 +1082,17 @@ class Repository:
         self, season_id: Optional[int] = None, player_id: Optional[str] = None
     ) -> list[dict]:
         """
-        Get cumulative loot statistics across all runs.
+        모든 런의 누적 전리품 통계 조회.
 
-        Aggregates all item deltas (positive quantities only) grouped by config_base_id.
-        Excludes map costs (proto_name='Spv3Open') and gear page (PageId 100).
+        전체 아이템 변화량 집계 (양수만, config_base_id별 그룹화).
+        맵 비용(Spv3Open) 및 장비 탭(PageId 100) 제외.
 
         Args:
-            season_id: Filter by season (uses context if None)
-            player_id: Filter by player (uses context if None)
+            season_id: 시즌 필터 (None일 경우 컨텍스트 사용)
+            player_id: 플레이어 필터 (None일 경우 컨텍스트 사용)
 
         Returns:
-            List of dicts with keys: config_base_id, total_quantity
+            딕셔너리 리스트: [{"config_base_id": int, "total_quantity": int}, ...]
         """
         # Use provided values or fall back to context
         season_id = season_id if season_id is not None else self._current_season_id
@@ -1101,10 +1121,10 @@ class Repository:
             params.append(player_id or '')
 
         # Exclude gear page
-        if EXCLUDED_PAGES:
-            placeholders = ",".join("?" * len(EXCLUDED_PAGES))
-            base_query += f" AND page_id NOT IN ({placeholders})"
-            params.extend(EXCLUDED_PAGES)
+        where_filter, filter_params = self._build_excluded_pages_filter(include_excluded=False)
+        if where_filter:
+            base_query += f" AND {where_filter}"
+            params.extend(filter_params)
 
         # Group and filter for positive quantities only
         base_query += " GROUP BY config_base_id HAVING SUM(delta) > 0"
@@ -1259,15 +1279,20 @@ class Repository:
         mapping_play_seconds: float = 0.0,
     ) -> dict:
         """
-        Create a new farming session and associate unassigned runs.
+        새 파밍 세션 생성 및 미할당 런 연결.
 
-        - Inserts a new row into sessions with current player context.
-        - Links all runs that have session_id IS NULL (and match player context).
-        - Calculates run_count and total_net_profit_fe from associated runs.
-        - Does NOT delete runs/item_deltas (data preservation).
+        세션 테이블에 새 행 삽입 (현재 플레이어 컨텍스트 사용).
+        session_id가 NULL인 모든 런을 이 세션에 연결 (플레이어 컨텍스트 일치).
+        연결된 런 기반으로 run_count 및 total_net_profit_fe 계산.
+        런/아이템 델타는 삭제하지 않음 (데이터 보존).
+
+        Args:
+            name: 세션 이름
+            total_play_seconds: 총 플레이 시간 (초)
+            mapping_play_seconds: 맵핑 시간 (초)
 
         Returns:
-            Dict with the created session info.
+            생성된 세션 정보 딕셔너리
         """
         player_id = self._current_player_id
         season_id = self._current_season_id
@@ -1386,10 +1411,21 @@ class Repository:
 
     def get_session_stats(self, session_id: int) -> dict:
         """
-        Calculate detailed statistics for a session.
+        세션의 상세 통계 계산.
 
-        Returns a dict with profitability, time, run metrics, deep analysis,
-        and raw radar chart axis values.
+        수익성, 시간, 런 메트릭, 심화 분석, 레이더 차트 축 값 등 포함.
+
+        Args:
+            session_id: 조회할 세션 ID
+
+        Returns:
+            통계 딕셔너리:
+            - 수익: total_gross_value_fe, total_net_profit_fe, avg_run_profit_fe
+            - 시간: profit_per_hour_mapping, total_play_seconds, mapping_play_seconds
+            - 런: run_count, runs_per_hour, avg_run_seconds
+            - 분석: high_run_count, profit_stddev, profit_cv, median_run_profit_fe
+            - 레이더: radar_profitability, radar_stability, radar_efficiency, radar_burst, radar_speed, radar_scale
+            - 태그: tags (파밍 스타일 분류)
         """
         # Get session row
         session_row = self.db.fetchone(
@@ -1652,13 +1688,17 @@ class Repository:
 
     def compare_sessions(self, session_ids: list[int]) -> dict:
         """
-        Compare up to 3 sessions with normalized radar chart data and analysis.
+        최대 3개 세션 비교 (정규화된 레이더 차트 + 분석).
 
         Args:
-            session_ids: List of session IDs to compare (max 3).
+            session_ids: 비교할 세션 ID 리스트 (최대 3개)
 
         Returns:
-            Dict with sessions stats, normalized radar, analysis, and recommendation.
+            비교 결과 딕셔너리:
+            - sessions: 각 세션의 통계 리스트
+            - radar_normalized: 정규화된 레이더 차트 데이터 (0-100 스케일)
+            - analysis: 각 세션의 파밍 스타일 분석 (type, summary)
+            - recommendation: 추천 메시지 (어떤 세션이 더 나은지)
         """
         session_ids = session_ids[:3]  # cap at 3
 

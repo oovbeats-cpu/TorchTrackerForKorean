@@ -116,7 +116,7 @@ body.has-titlebar .session-scroll-container {
 }
 
 .titlebar-btn.close-btn:hover {
-    background: #e81123;
+    background: var(--error-critical);
     color: white;
 }
 
@@ -133,7 +133,7 @@ body.has-titlebar .session-scroll-container {
 }
 
 .titlebar-btn.overlay-btn.active {
-    color: #4ecc63;
+    color: var(--success-alt);
 }
 
 .titlebar-btn.overlay-btn.active:hover {
@@ -286,15 +286,37 @@ body.has-titlebar .session-scroll-container {
 }
 
 :root {
+    /* Background Colors */
     --bg-primary: #1a1a2e;
     --bg-secondary: #16213e;
     --bg-card: #0f3460;
+    --bg-light: #e2e4e9;
+
+    /* Text Colors */
     --text-primary: #eaeaea;
     --text-secondary: #a0a0a0;
+
+    /* Accent Colors */
     --accent: #e94560;
     --accent-secondary: #ff6b6b;
     --positive: #4ecca3;
     --negative: #ff6b6b;
+
+    /* Status Colors */
+    --warning: #ffb74d;
+    --info: #64b5f6;
+    --success-alt: #4ecc63;
+    --error-critical: #e81123;
+    --danger: #dc2626;
+
+    /* Special Colors */
+    --gold: #ffd700;
+    --purple: #bb86fc;
+    --cyan: #00e5ff;
+    --green-light: #81c784;
+    --blue-light: #5dade2;
+
+    /* Border & Shadow */
     --border: #2a2a4a;
     --shadow: rgba(0, 0, 0, 0.3);
 }
@@ -410,7 +432,7 @@ h6,
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: #4ecca3;
+    background: var(--positive);
     cursor: pointer;
 }
 
@@ -499,7 +521,7 @@ h6,
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: #4ecca3;
+    background: var(--positive);
     cursor: pointer;
 }
 
@@ -729,11 +751,11 @@ header h1::after {
 }
 
 .time-btn.play {
-    background-color: #4ecca3 !important;
+    background-color: var(--positive) !important;
 }
 
 .time-btn.pause {
-    background-color: #e94560 !important;
+    background-color: var(--accent) !important;
 }
 
 .time-btn.hidden {
@@ -779,16 +801,16 @@ header h1::after {
 }
 
 .time-card.total {
-    background-color: #e2e4e9 !important;
-    color: #1a1a2e !important;
+    background-color: var(--bg-light) !important;
+    color: var(--bg-primary) !important;
 }
 
 .time-card.total .time-label {
-    color: #1a1a2e;
+    color: var(--bg-primary);
 }
 
 .time-card.mapping {
-    background-color: #e94560 !important;
+    background-color: var(--accent) !important;
     color: white !important;
 }
 
@@ -1729,8 +1751,8 @@ tbody tr:last-child td {
 }
 
 .help-btn:hover {
-    border-color: #64b5f6;
-    color: #64b5f6;
+    border-color: var(--info);
+    color: var(--info);
 }
 
 .settings-btn:hover {
@@ -2090,7 +2112,7 @@ tr.nightmare .zone-name {
 }
 
 .cloud-status-indicator.syncing {
-    background: #ffb74d;
+    background: var(--warning);
     animation: pulse 1s infinite;
 }
 
@@ -2273,7 +2295,7 @@ tr.nightmare .zone-name {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #64b5f6;
+    background: var(--info);
     margin-left: 6px;
     vertical-align: middle;
     cursor: help;
@@ -3141,7 +3163,7 @@ tr.nightmare .zone-name {
 }
 
 .cost-warning {
-    color: #ffb74d;
+    color: var(--warning);
     cursor: help;
 }
 
@@ -3406,7 +3428,7 @@ tr.nightmare .zone-name {
     display: inline-block;
     background: rgba(93, 173, 226, 0.15);
     border: 1px solid rgba(93, 173, 226, 0.3);
-    color: #5dade2;
+    color: var(--blue-light);
     font-size: 0.7em;
     font-weight: 600;
     padding: 2px 8px;
@@ -3457,7 +3479,7 @@ tr.nightmare .zone-name {
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: #4ecca3;
+    background: var(--positive);
     cursor: pointer;
 }
 
@@ -3547,7 +3569,7 @@ tr.nightmare .zone-name {
 /* HIGH RUN Badge */
 .high-run-badge {
     display: inline-block;
-    background: #dc2626;
+    background: var(--danger);
     color: #ffffff;
     font-family: 'Pretendard', 'Segoe UI', sans-serif;
     font-size: 0.6rem;
@@ -3648,31 +3670,31 @@ tr.nightmare .zone-name {
 
 .tag-stability_first {
     background: rgba(78, 204, 163, 0.2);
-    color: #4ecca3;
+    color: var(--positive);
     border: 1px solid rgba(78, 204, 163, 0.3);
 }
 
 .tag-season_addict {
     background: rgba(187, 134, 252, 0.2);
-    color: #bb86fc;
+    color: var(--purple);
     border: 1px solid rgba(187, 134, 252, 0.3);
 }
 
 .tag-endurance_goat {
     background: rgba(255, 183, 77, 0.2);
-    color: #ffb74d;
+    color: var(--warning);
     border: 1px solid rgba(255, 183, 77, 0.3);
 }
 
 .tag-fast_spin {
     background: rgba(0, 229, 255, 0.2);
-    color: #00e5ff;
+    color: var(--cyan);
     border: 1px solid rgba(0, 229, 255, 0.3);
 }
 
 .tag-leisurely {
     background: rgba(129, 199, 132, 0.2);
-    color: #81c784;
+    color: var(--green-light);
     border: 1px solid rgba(129, 199, 132, 0.3);
 }
 
@@ -3684,13 +3706,13 @@ tr.nightmare .zone-name {
 
 .tag-hrhr {
     background: rgba(255, 215, 0, 0.2);
-    color: #ffd700;
+    color: var(--gold);
     border: 1px solid rgba(255, 215, 0, 0.3);
 }
 
 .tag-farming_god {
     background: linear-gradient(135deg, rgba(255, 215, 0, 0.3), rgba(255, 69, 0, 0.3));
-    color: #ffd700;
+    color: var(--gold);
     border: 1px solid rgba(255, 215, 0, 0.5);
     text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
 }
@@ -4031,8 +4053,8 @@ tr.nightmare .zone-name {
     font-weight: 500;
 }
 
-.type-stable { background: rgba(78, 204, 163, 0.2); color: #4ecca3; }
-.type-burst { background: rgba(233, 69, 96, 0.2); color: #e94560; }
+.type-stable { background: rgba(78, 204, 163, 0.2); color: var(--positive); }
+.type-burst { background: rgba(233, 69, 96, 0.2); color: var(--accent); }
 .type-efficient { background: rgba(78, 163, 235, 0.2); color: #4ea3eb; }
 .type-balanced { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
 

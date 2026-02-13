@@ -14,7 +14,7 @@ from typing import Optional
 from titrack.collector.collector import Collector
 from titrack.config.logging import setup_logging, get_logger
 from titrack.config.settings import Settings, find_log_file
-from titrack.core.models import Item, ItemDelta, Price, Run
+from titrack.core.models import ItemDelta, Price, Run
 from titrack.core.time_tracker import TimeTracker
 from titrack.data.zones import get_zone_display_name
 from titrack.db.connection import Database
@@ -24,7 +24,7 @@ from titrack.parser.player_parser import get_enter_log_path, get_effective_playe
 from titrack.sync.manager import SyncManager
 
 
-def print_delta(delta: ItemDelta, repo: Repository) -> None:
+def _print_delta(delta: ItemDelta, repo: Repository) -> None:
     """Print a delta to console."""
     item_name = repo.get_item_name(delta.config_base_id)
     sign = "+" if delta.delta > 0 else ""
@@ -32,14 +32,14 @@ def print_delta(delta: ItemDelta, repo: Repository) -> None:
     print(f"  {sign}{delta.delta} {item_name} {context_str}")
 
 
-def print_run_start(run: Run) -> None:
+def _print_run_start(run: Run) -> None:
     """Print run start to console."""
     hub_str = " (hub)" if run.is_hub else ""
     zone_name = get_zone_display_name(run.zone_signature, run.level_id)
     print(f"\n=== Entered: {zone_name}{hub_str} ===")
 
 
-def print_run_end(run: Run, repo: Repository) -> None:
+def _print_run_end(run: Run, repo: Repository) -> None:
     """Print run end summary to console."""
     if run.is_hub:
         return
@@ -82,7 +82,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     # Seed items if provided
     if settings.seed_file:
         print(f"Seeding items from: {settings.seed_file}")
-        count = seed_items(repo, settings.seed_file)
+        count = _seed_items(repo, settings.seed_file)
         print(f"  Loaded {count} items")
     else:
         existing = repo.get_item_count()
@@ -94,7 +94,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         prices_path = Path(prices_seed)
         if prices_path.exists():
             print(f"Seeding prices from: {prices_path}")
-            count = seed_prices(repo, prices_path)
+            count = _seed_prices(repo, prices_path)
             print(f"  Loaded {count} prices")
         else:
             print(f"  Warning: Price seed file not found: {prices_path}")
@@ -107,7 +107,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
-def seed_items(repo: Repository, seed_file: Path) -> int:
+def _seed_items(repo: Repository, seed_file: Path) -> int:
     """Load items from seed file into database."""
     with open(seed_file, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -131,7 +131,7 @@ def seed_items(repo: Repository, seed_file: Path) -> int:
     return len(items)
 
 
-def seed_prices(repo: Repository, seed_file: Path) -> int:
+def _seed_prices(repo: Repository, seed_file: Path) -> int:
     """Load prices from seed file into database."""
     with open(seed_file, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -185,9 +185,9 @@ def cmd_parse_file(args: argparse.Namespace) -> int:
     collector = Collector(
         db=db,
         log_path=settings.log_path,
-        on_delta=lambda d: print_delta(d, repo),
-        on_run_start=print_run_start,
-        on_run_end=lambda r: print_run_end(r, repo),
+        on_delta=lambda d: _print_delta(d, repo),
+        on_run_start=_print_run_start,
+        on_run_end=lambda r: _print_run_end(r, repo),
         player_info=player_info,
     )
     collector.initialize()
@@ -240,9 +240,9 @@ def cmd_tail(args: argparse.Namespace) -> int:
     collector = Collector(
         db=db,
         log_path=settings.log_path,
-        on_delta=lambda d: print_delta(d, repo),
-        on_run_start=print_run_start,
-        on_run_end=lambda r: print_run_end(r, repo),
+        on_delta=lambda d: _print_delta(d, repo),
+        on_run_start=_print_run_start,
+        on_run_end=lambda r: _print_run_end(r, repo),
         player_info=player_info,
     )
     collector.initialize()

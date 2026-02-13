@@ -159,7 +159,12 @@ class SyncManager:
         self._set_status(SyncStatus.DISABLED)
 
     def start_background_sync(self) -> None:
-        """Start background sync threads."""
+        """
+        백그라운드 동기화 스레드 시작.
+
+        업로드 스레드 (60초 간격): 대기열의 가격 제출 처리.
+        다운로드 스레드 (5분 간격): 클라우드 가격 및 히스토리 가져오기.
+        """
         if self._running:
             return
 
@@ -201,13 +206,16 @@ class SyncManager:
         prices_array: list[float],
     ) -> None:
         """
-        Queue a price submission for upload.
+        가격 제출을 업로드 대기열에 추가.
+
+        업로드 활성화 및 클라우드 동기화 활성화 시에만 큐잉.
+        백그라운드 업로드 스레드가 60초마다 대기열 처리.
 
         Args:
-            config_base_id: Item type ID
-            season_id: Current season ID
-            price_fe: Calculated reference price
-            prices_array: Full array of prices from AH search
+            config_base_id: 아이템 타입 ID
+            season_id: 현재 시즌 ID
+            price_fe: 계산된 참조 가격 (FE)
+            prices_array: 거래소 검색 결과 가격 배열 (전체)
         """
         print(f"[QUEUE] START: config_base_id={config_base_id}, season_id={season_id}")
         print(f"[QUEUE] is_enabled={self.is_enabled}, is_upload_enabled={self.is_upload_enabled}")
@@ -273,10 +281,17 @@ class SyncManager:
 
     def trigger_sync(self) -> dict:
         """
-        Trigger an immediate sync.
+        즉시 동기화 트리거 (수동 동기화).
+
+        업로드 활성화 시: 대기열의 모든 가격 제출 처리.
+        다운로드 활성화 시: 클라우드에서 최신 가격 가져오기.
 
         Returns:
-            Dict with sync results
+            동기화 결과 딕셔너리:
+            - success (bool): 성공 여부
+            - uploaded (int): 업로드된 아이템 수
+            - downloaded (int): 다운로드된 가격 수
+            - error (str, optional): 에러 메시지
         """
         if not self.is_enabled:
             return {"success": False, "error": "Cloud sync not enabled"}
@@ -301,13 +316,18 @@ class SyncManager:
 
     def get_cached_cloud_prices(self, season_id: Optional[int] = None) -> list[dict]:
         """
-        Get cached cloud prices from local database.
+        로컬 DB에서 캐시된 클라우드 가격 조회.
 
         Args:
-            season_id: Filter by season (uses current if None)
+            season_id: 시즌 필터 (None일 경우 현재 시즌 사용)
 
         Returns:
-            List of price dicts
+            가격 딕셔너리 리스트:
+            - config_base_id, season_id
+            - price_fe_median, price_fe_p10, price_fe_p90 (FE)
+            - submission_count (제출 수), unique_devices (기여자 수)
+            - cloud_updated_at (클라우드 업데이트 시각)
+            - cached_at (로컬 캐시 시각)
         """
         season_id = season_id or self._season_id or 0
 
@@ -645,9 +665,10 @@ class SyncManager:
 
     def initialize(self) -> None:
         """
-        Initialize sync manager on startup.
+        시작 시 동기화 매니저 초기화.
 
-        Checks if sync was enabled and reconnects if so.
+        이전 세션에서 동기화가 활성화되어 있었으면 자동 재연결.
+        Supabase SDK 가용성 및 설정 확인 후 백그라운드 스레드 시작.
         """
         if not self.is_enabled:
             return

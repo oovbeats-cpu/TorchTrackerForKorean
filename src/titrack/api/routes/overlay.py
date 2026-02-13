@@ -4,7 +4,7 @@ Provides GET/POST endpoints for the overlay subprocess to poll
 and for the main window to update overlay settings.
 """
 
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
@@ -33,7 +33,7 @@ class OverlayConfigUpdate(BaseModel):
     scale: Optional[float] = None
     visible: Optional[bool] = None
     locked: Optional[bool] = None
-    visible_columns: Optional[List[str]] = None
+    visible_columns: Optional[list[str]] = None
     text_shadow: Optional[bool] = None
     bg_opacity: Optional[float] = None
     preset: Optional[int] = None
